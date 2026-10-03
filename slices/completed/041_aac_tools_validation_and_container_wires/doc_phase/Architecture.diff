@@ -1,0 +1,733 @@
+/work/Architecture — P1: git diff d79ce6ead4ca..a3f595ea2350
+
+.claude/architecture/arch-validate.py |  3 +-
+ service/package-lock.json             | 18 +++++++++++-
+ service/package.json                  |  3 +-
+ service/src/error-translate.ts        | 42 ++++++++++++++++++++--------
+ service/src/source-locate.ts          | 73 ++++++++++++++++++++++++++++++++++++++++++++++++
+ service/src/validate.ts               | 17 +++++++++---
+ service/test/arch-validate.test.ts    | 36 ++++++++++++++++++++++++
+ service/test/error-translate.test.ts  | 41 +++++++++++++++++++++++++++
+ service/test/firmware-artifact.ts     | 25 +++++++++++++++++
+ service/test/source-locate.test.ts    | 67 ++++++++++++++++++++++++++++++++++++++++++++
+ service/test/validate.test.ts         | 83 +++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ 11 files changed, 390 insertions(+), 18 deletions(-)
+
+diff --git a/.claude/architecture/arch-validate.py b/.claude/architecture/arch-validate.py
+index 8fc89c5..be4e629 100755
+--- a/.claude/architecture/arch-validate.py
++++ b/.claude/architecture/arch-validate.py
+@@ -99,7 +99,8 @@ def print_human(name, response, quiet, c):
+ 
+     for err in errors:
+         sys.stderr.write(f"  {err.get('path', '')}\n")
+-        sys.stderr.write(f"    {err.get('message', '')}\n")
++        line = f"line {err['line']}: " if "line" in err else ""
++        sys.stderr.write(f"    {line}{err.get('message', '')}\n")
+         sys.stderr.write(f"    schema: {err.get('schemaUrl', '')}\n")
+         if err.get("hint"):
+             sys.stderr.write(f"    hint: {err['hint']}\n")
+diff --git a/service/package-lock.json b/service/package-lock.json
+index aa9fff0..6c234bf 100644
+--- a/service/package-lock.json
++++ b/service/package-lock.json
+@@ -13,7 +13,8 @@
+         "express": "^4.21.2",
+         "js-yaml": "^4.1.0",
+         "markdown-it": "^14.1.0",
+-        "prom-client": "^15.1.3"
++        "prom-client": "^15.1.3",
++        "yaml": "^2.9.1"
+       },
+       "devDependencies": {
+         "@types/express": "^4.17.21",
+@@ -2990,6 +2991,21 @@
+       "integrity": "sha512-l4Sp/DRseor9wL6EvV2+TuQn63dMkPjZ/sp9XkghTEbV9KlPS1xUsZ3u7/IQO4wxtcFB4bgpQPRcR3QCvezPcQ==",
+       "dev": true,
+       "license": "ISC"
++    },
++    "node_modules/yaml": {
++      "version": "2.9.1",
++      "resolved": "https://registry.npmjs.org/yaml/-/yaml-2.9.1.tgz",
++      "integrity": "sha512-3NxN8+78OdzbT7C/WjGsyfPAtJaN3FNDsWxv7Y7mcDsT/oOmgW8BpyQQFFBnvZE3j9Y2Sdz1ULFLezL7Eb2yFw==",
++      "license": "ISC",
++      "bin": {
++        "yaml": "bin.mjs"
++      },
++      "engines": {
++        "node": ">= 14.6"
++      },
++      "funding": {
++        "url": "https://github.com/sponsors/eemeli"
++      }
+     }
+   }
+ }
+diff --git a/service/package.json b/service/package.json
+index 6c4c53d..9b3c296 100644
+--- a/service/package.json
++++ b/service/package.json
+@@ -16,7 +16,8 @@
+     "express": "^4.21.2",
+     "js-yaml": "^4.1.0",
+     "markdown-it": "^14.1.0",
+-    "prom-client": "^15.1.3"
++    "prom-client": "^15.1.3",
++    "yaml": "^2.9.1"
+   },
+   "devDependencies": {
+     "@types/express": "^4.17.21",
+diff --git a/service/src/error-translate.ts b/service/src/error-translate.ts
+index cd225dc..5354744 100644
+--- a/service/src/error-translate.ts
++++ b/service/src/error-translate.ts
+@@ -1,8 +1,11 @@
+ import type { ErrorObject } from "ajv";
++import type { Locator, SourceNode } from "./source-locate.js";
+ 
+ export interface TranslatedError {
+   /** JSON Pointer into the submitted artifact. */
+   path: string;
++  /** 1-based line of the node at `path` in the submitted text; absent when it does not map to one. */
++  line?: number;
+   /** Full-sentence English explanation, quoting the offending value when short. */
+   message: string;
+   /** The value at `path` (extracted from the artifact), so the reader doesn't have to re-fetch it. */
+@@ -59,11 +62,12 @@ const STRUCTURAL_KEYWORDS = new Set([
+ export function translateErrors(
+   rawErrors: readonly ErrorObject[],
+   artifact: unknown,
++  locate?: Locator,
+ ): TranslatedError[] {
+   if (rawErrors.length === 0) return [];
+ 
+   const deduped = dedupCascades(rawErrors);
+-  return deduped.map((e) => translateOne(e, artifact));
++  return deduped.map((e) => translateOne(e, artifact, locate));
+ }
+ 
+ // Preferred informativeness order for structural cascade summaries.
+@@ -140,14 +144,16 @@ function pushDedupedLeafs(out: ErrorObject[], leafs: readonly ErrorObject[]): vo
+   }
+ }
+ 
+-function translateOne(e: ErrorObject, artifact: unknown): TranslatedError {
++function translateOne(e: ErrorObject, artifact: unknown, locate?: Locator): TranslatedError {
+   const path = e.instancePath ?? "";
+   const value = extractByPointer(artifact, path);
++  const node = locate?.(path);
+   const fn = translators[e.keyword] ?? translateGeneric;
+-  const partial = fn(e, value);
++  const partial = fn(e, value, node);
+   const schemaUrl = partial.schemaUrl ?? deriveSchemaUrl(path, e, value);
+   return {
+     path,
++    ...(node ? { line: node.line } : {}),
+     keyword: e.keyword,
+     message: partial.message,
+     schemaUrl,
+@@ -162,7 +168,7 @@ interface PartialTranslation {
+   schemaUrl?: string;
+ }
+ 
+-type Translator = (e: ErrorObject, value: unknown) => PartialTranslation;
++type Translator = (e: ErrorObject, value: unknown, node?: SourceNode) => PartialTranslation;
+ 
+ const translators: Record<string, Translator> = {
+   additionalProperties(e, _value): PartialTranslation {
+@@ -185,13 +191,16 @@ const translators: Record<string, Translator> = {
+       hint: prop ? `add the '${prop}' field` : undefined,
+     };
+   },
+-  type(e, value): PartialTranslation {
+-    const expected = (e.params as { type?: string | string[] }).type;
+-    return {
+-      message: `value ${quoteShort(value)} is not of expected type ${
+-        Array.isArray(expected) ? expected.join("|") : (expected ?? "?")
+-      }`,
+-    };
++  type(e, value, node): PartialTranslation {
++    const param = (e.params as { type?: string | string[] }).type;
++    const expected = Array.isArray(param) ? param.join("|") : (param ?? "?");
++    if (node?.scalar) {
++      const { source, key } = node.scalar;
++      return {
++        message: `${key !== undefined ? `${key}: ` : ""}${source} (parsed as ${describeParsed(value, source)}) is not of expected type ${expected}`,
++      };
++    }
++    return { message: `value ${quoteShort(value)} is not of expected type ${expected}` };
+   },
+   enum(e, value): PartialTranslation {
+     const allowed = (e.params as { allowedValues?: unknown[] }).allowedValues ?? [];
+@@ -312,6 +321,17 @@ function quoteShort(value: unknown): string {
+   return typeof value;
+ }
+ 
++/** js-yaml's integer forms (decimal, 0b, 0o, 0x, `_` separators); every other number it reads is a float. */
++const INT_SOURCE = /^[-+]?(0b[01_]+|0o[0-7_]+|0x[0-9a-f_]+|[0-9][0-9_]*)$/i;
++
++function describeParsed(value: unknown, source: string): string {
++  if (value === null) return "null";
++  if (typeof value === "number") return `${INT_SOURCE.test(source) ? "int" : "float"} ${value}`;
++  if (typeof value === "boolean") return `bool ${value}`;
++  if (typeof value === "string") return `string ${quoteShort(value)}`;
++  return typeof value;
++}
++
+ /** Resolve a JSON Pointer (RFC 6901) against the artifact. Returns undefined
+  *  if any segment is missing. */
+ export function extractByPointer(artifact: unknown, pointer: string): unknown {
+diff --git a/service/src/source-locate.ts b/service/src/source-locate.ts
+new file mode 100644
+index 0000000..85df865
+--- /dev/null
++++ b/service/src/source-locate.ts
+@@ -0,0 +1,73 @@
++import { isAlias, isMap, isScalar, isSeq, LineCounter, parseDocument, type Node } from "yaml";
++
++/** Where a JSON Pointer's value sits in the submitted text. */
++export interface SourceNode {
++  /** 1-based line of the node — of its key, when the node is a mapping value. */
++  line: number;
++  /** Set when the node is a scalar: its text as written, and the mapping key it sits under. */
++  scalar?: { source: string; key?: string };
++}
++
++export type Locator = (pointer: string) => SourceNode | undefined;
++
++/**
++ * Locate JSON Pointers in the submitted text with a second, position-keeping
++ * parse. The validated value comes from the js-yaml / JSON.parse result; this
++ * parse only maps pointers to nodes. The document is parsed on the first call,
++ * so a valid artifact never pays for it.
++ */
++export function sourceLocator(text: string): Locator {
++  let parsed: { doc: ReturnType<typeof parseDocument>; lines: LineCounter } | undefined;
++  return (pointer) => {
++    if (!parsed) {
++      const lines = new LineCounter();
++      parsed = { doc: parseDocument(text, { lineCounter: lines, merge: true }), lines };
++    }
++    const { doc, lines } = parsed;
++    const segments = pointer === "" ? [] : pointer.slice(1).split("/").map(unescapeSegment);
++
++    let node: unknown = doc.contents;
++    let keyNode: Node | undefined;
++    let key: string | undefined;
++    for (const seg of segments) {
++      node = isAlias(node) ? node.resolve(doc) : node;
++      if (isMap(node)) {
++        const pair = node.items.find((p) => isScalar(p.key) && String(p.key.value) === seg);
++        if (!pair) return undefined;
++        node = pair.value;
++        keyNode = pair.key as Node;
++        key = seg;
++      } else if (isSeq(node)) {
++        const idx = Number(seg);
++        if (!Number.isInteger(idx)) return undefined;
++        node = node.items[idx];
++        keyNode = undefined;
++        key = undefined;
++      } else {
++        return undefined;
++      }
++    }
++    node = isAlias(node) ? node.resolve(doc) : node;
++    const anchor = (keyNode ?? node) as Node | null | undefined;
++    if (!anchor?.range) return undefined;
++
++    const out: SourceNode = { line: lines.linePos(anchor.range[0]).line };
++    if (isScalar(node) && node.range) {
++      out.scalar = {
++        source: shorten(text.slice(node.range[0], node.range[1])),
++        ...(key !== undefined ? { key } : {}),
++      };
++    }
++    return out;
++  };
++}
++
++function unescapeSegment(s: string): string {
++  return s.replace(/~1/g, "/").replace(/~0/g, "~");
++}
++
++function shorten(source: string): string {
++  const first = source.split("\n", 1)[0]!;
++  const cut = first.length <= 60 ? first : first.slice(0, 57);
++  return cut === source ? source : `${cut}…`;
++}
+diff --git a/service/src/validate.ts b/service/src/validate.ts
+index 7d904e6..a60b540 100644
+--- a/service/src/validate.ts
++++ b/service/src/validate.ts
+@@ -2,6 +2,7 @@ import express, { type Router } from "express";
+ import yaml from "js-yaml";
+ import type { SchemaBundle } from "./schema-loader.js";
+ import { translateErrors, type TranslatedError } from "./error-translate.js";
++import { sourceLocator, type Locator } from "./source-locate.js";
+ import type { Metrics, ValidateOutcome } from "./metrics.js";
+ 
+ export interface ValidateOptions {
+@@ -85,11 +86,12 @@ export function mountValidate(opts: ValidateOptions): Router {
+         return;
+       }
+ 
++      const locate = sourceLocator(raw.toString("utf8"));
+       const ok = opts.bundle.artifactValidator(artifact);
+       const schemaErrors = ok
+         ? []
+-        : translateErrors(opts.bundle.artifactValidator.errors ?? [], artifact);
+-      const tripleErrors = checkRelationsTriples(artifact, opts.bundle);
++        : translateErrors(opts.bundle.artifactValidator.errors ?? [], artifact, locate);
++      const tripleErrors = checkRelationsTriples(artifact, opts.bundle, locate);
+       const all = [...schemaErrors, ...tripleErrors];
+ 
+       outcome = all.length === 0 ? "valid" : "invalid";
+@@ -161,7 +163,11 @@ function parseBody(raw: Buffer, ctype: string): unknown {
+   );
+ }
+ 
+-function checkRelationsTriples(artifact: unknown, bundle: SchemaBundle): TranslatedError[] {
++function checkRelationsTriples(
++  artifact: unknown,
++  bundle: SchemaBundle,
++  locate: Locator,
++): TranslatedError[] {
+   if (!artifact || typeof artifact !== "object") return [];
+   const env = artifact as Record<string, unknown>;
+   const relations = env.relations;
+@@ -191,8 +197,11 @@ function checkRelationsTriples(artifact: unknown, bundle: SchemaBundle): Transla
+     const targetKind = kindById.get(r.target);
+     if (!sourceKind || !targetKind) return; // cross-producer; defer to collector
+     if (!bundle.allowedTriples.has(sourceKind, r.type, targetKind)) {
++      const path = `/relations/${i}`;
++      const line = locate(path)?.line;
+       errors.push({
+-        path: `/relations/${i}`,
++        path,
++        ...(line !== undefined ? { line } : {}),
+         keyword: "x-allowedTriples",
+         message: `relation type '${r.type}' is not allowed between ${sourceKind} (source) and ${targetKind} (target)`,
+         value: { source: r.source, type: r.type, target: r.target },
+diff --git a/service/test/arch-validate.test.ts b/service/test/arch-validate.test.ts
+index f8420e7..ddacc35 100644
+--- a/service/test/arch-validate.test.ts
++++ b/service/test/arch-validate.test.ts
+@@ -5,6 +5,7 @@ import path from "node:path";
+ import { createServer, type Server } from "node:http";
+ import { createApp } from "../src/app.js";
+ import { loadSchemas } from "../src/schema-loader.js";
++import { firmwareArtifact } from "./firmware-artifact.js";
+ 
+ const exec = promisify(execFile);
+ 
+@@ -112,6 +113,41 @@ describe(".claude/architecture/arch-validate.py", () => {
+     expect(r.stderr).toMatch(/✗/);
+   });
+ 
++  it("prints the line, the scalar as written and its parsed value for a type error", async () => {
++    const { text, line } = firmwareArtifact();
++    const r = await run(["-"], { input: text });
++    expect(r.code).toBe(1);
++    expect(r.stderr).toContain(
++      [
++        "  /devices/3/stats/firmware",
++        `    line ${line}: firmware: 9e10234 (parsed as float Infinity) is not of expected type string`,
++        "    schema: https://architecture.webathome.org/schema/v0.1/generated/device.schema.json",
++      ].join("\n"),
++    );
++  });
++
++  it("prints an error without a line exactly as before", async () => {
++    const response = JSON.stringify({
++      valid: false,
++      schemaVersion: "0.1",
++      errors: [{ path: "/nodes/0/id", keyword: "pattern", message: "bad id", schemaUrl: "s", hint: "h" }],
++    });
++    const stub = createServer((_req, res) => {
++      res.writeHead(200, { "Content-Type": "application/json" });
++      res.end(response);
++    });
++    await new Promise<void>((resolve) => stub.listen(0, "127.0.0.1", () => resolve()));
++    const addr = stub.address();
++    if (!addr || typeof addr === "string") throw new Error("listen() returned unexpected address");
++    try {
++      const r = await runWithStdin(["-"], "x: 1\n", `http://127.0.0.1:${addr.port}/`);
++      expect(r.code).toBe(1);
++      expect(r.stderr).toBe("✗ <stdin>\n  /nodes/0/id\n    bad id\n    schema: s\n    hint: h\n");
++    } finally {
++      await new Promise<void>((resolve) => stub.close(() => resolve()));
++    }
++  });
++
+   it("exits 2 on transport error (endpoint unreachable)", async () => {
+     const r = await runWithUrl("http://127.0.0.1:1/api/validate", [
+       path.join(EXAMPLES, "valid-minimal.yaml"),
+diff --git a/service/test/error-translate.test.ts b/service/test/error-translate.test.ts
+index 2026116..5c9db60 100644
+--- a/service/test/error-translate.test.ts
++++ b/service/test/error-translate.test.ts
+@@ -4,6 +4,7 @@ import { readFileSync } from "node:fs";
+ import yaml from "js-yaml";
+ import { loadSchemas } from "../src/schema-loader.js";
+ import { translateErrors, extractByPointer } from "../src/error-translate.js";
++import { sourceLocator } from "../src/source-locate.js";
+ 
+ const REPO_SCHEMA_ROOT = path.resolve(__dirname, "../../schema/v0.1");
+ const EXAMPLES = path.resolve(__dirname, "../../schema/v0.1/examples");
+@@ -81,6 +82,46 @@ describe("per-keyword translators", () => {
+     expect(out[0]!.message).toMatch(/not of expected type string/);
+   });
+ 
++  it("type, located: quotes the scalar as written beside the parsed value", () => {
++    const text = "x: 9e10234\ny: 0o1_7\nz:\n  - 1_0e5\nw: true\n";
++    const doc = { x: Infinity, y: 15, z: [1000000], w: true };
++    const out = translateErrors(
++      [
++        makeErr("type", { type: "string" }, { instancePath: "/x" }),
++        makeErr("type", { type: "string" }, { instancePath: "/y" }),
++        makeErr("type", { type: "string" }, { instancePath: "/z/0" }),
++        makeErr("type", { type: "string" }, { instancePath: "/w" }),
++      ],
++      doc,
++      sourceLocator(text),
++    );
++    expect(out.map((e) => [e.line, e.message])).toEqual([
++      // sorted by path
++      [5, "w: true (parsed as bool true) is not of expected type string"],
++      [1, "x: 9e10234 (parsed as float Infinity) is not of expected type string"],
++      [2, "y: 0o1_7 (parsed as int 15) is not of expected type string"],
++      [4, "1_0e5 (parsed as float 1000000) is not of expected type string"],
++    ]);
++  });
++
++  it("type, located on a non-scalar: keeps the value-only message and adds the line", () => {
++    const out = translateErrors(
++      [makeErr("type", { type: "string" }, { instancePath: "/x" })],
++      { x: { a: 1 } },
++      sourceLocator("x:\n  a: 1\n"),
++    );
++    expect(out[0]).toMatchObject({ line: 1, message: "value object is not of expected type string" });
++  });
++
++  it("an error whose path does not map carries no line", () => {
++    const out = translateErrors(
++      [makeErr("required", { missingProperty: "id" }, { instancePath: "/nope" })],
++      {},
++      sourceLocator("a: 1\n"),
++    );
++    expect(out[0]).not.toHaveProperty("line");
++  });
++
+   it("const", () => {
+     const out = translateErrors(
+       [makeErr("const", { allowedValue: "0.1" }, { instancePath: "/schemaVersion" })],
+diff --git a/service/test/firmware-artifact.ts b/service/test/firmware-artifact.ts
+new file mode 100644
+index 0000000..a246a15
+--- /dev/null
++++ b/service/test/firmware-artifact.ts
+@@ -0,0 +1,25 @@
++/** The ANS-184 case: a live firmware string YAML 1.2 reads as a float overflowing to Infinity. */
++export function firmwareArtifact(): { text: string; line: number } {
++  const device = (n: number, firmware: string) =>
++    [
++      `  - id: device:dev${n},77777777-7777-4777-8777-77777777777${n}`,
++      `    label: Device ${n}`,
++      `    summary: Test device ${n}.`,
++      `    introduced: 2026-10-03`,
++      `    lifecycle: active`,
++      `    stats:`,
++      `      firmware: ${firmware}`,
++    ].join("\n");
++  const text = [
++    `schemaVersion: "0.1"`,
++    `producer: example`,
++    `devices:`,
++    device(0, `"1.2.3"`),
++    device(1, `abc123`),
++    device(2, `"9e10234"`),
++    device(3, `9e10234`),
++    ``,
++  ].join("\n");
++  const line = text.split("\n").indexOf("      firmware: 9e10234") + 1;
++  return { text, line };
++}
+diff --git a/service/test/source-locate.test.ts b/service/test/source-locate.test.ts
+new file mode 100644
+index 0000000..6bb656a
+--- /dev/null
++++ b/service/test/source-locate.test.ts
+@@ -0,0 +1,67 @@
++import { describe, it, expect } from "vitest";
++import { sourceLocator } from "../src/source-locate.js";
++
++const TEXT = [
++  "schemaVersion: \"0.1\"", // 1
++  "devices:", // 2
++  "  - id: a", // 3
++  "    stats:", // 4
++  "      firmware: 9e10234", // 5
++  "      a/b~c: x", // 6
++  "  - &second", // 7
++  "    id: b", // 8
++  "notes: |", // 9
++  "  first line", // 10
++  "  second line", // 11
++  "alias: *second", // 12
++  "long: " + "y".repeat(80), // 13
++].join("\n");
++
++describe("sourceLocator", () => {
++  const locate = sourceLocator(TEXT);
++
++  it("puts a mapping value on its key's line and keeps the scalar as written", () => {
++    expect(locate("/devices/0/stats/firmware")).toEqual({
++      line: 5,
++      scalar: { source: "9e10234", key: "firmware" },
++    });
++  });
++
++  it("locates a mapping-valued key on the key's line, with no scalar", () => {
++    expect(locate("/devices/0/stats")).toEqual({ line: 4 });
++  });
++
++  it("locates a sequence item on the item's first line", () => {
++    expect(locate("/devices/0")).toEqual({ line: 3 });
++    expect(locate("/devices/1")).toEqual({ line: 8 });
++  });
++
++  it("unescapes ~1 and ~0 in pointer segments", () => {
++    expect(locate("/devices/0/stats/a~1b~0c")?.line).toBe(6);
++  });
++
++  it("follows an alias to its anchored node", () => {
++    expect(locate("/alias/id")).toEqual({ line: 8, scalar: { source: "b", key: "id" } });
++  });
++
++  it("locates the root", () => {
++    expect(locate("")).toEqual({ line: 1 });
++  });
++
++  it("shortens a multi-line or long scalar to its first line", () => {
++    expect(locate("/notes")?.scalar?.source).toBe("|…");
++    expect(locate("/long")?.scalar?.source).toBe(`${"y".repeat(57)}…`);
++  });
++
++  it("returns undefined for a pointer that does not map", () => {
++    expect(locate("/devices/7")).toBeUndefined();
++    expect(locate("/devices/x")).toBeUndefined();
++    expect(locate("/missing")).toBeUndefined();
++    expect(locate("/schemaVersion/deeper")).toBeUndefined();
++  });
++
++  it("locates in a JSON body", () => {
++    const json = sourceLocator('{\n  "nodes": [\n    {"id": 1e5}\n  ]\n}');
++    expect(json("/nodes/0/id")).toEqual({ line: 3, scalar: { source: "1e5", key: "id" } });
++  });
++});
+diff --git a/service/test/validate.test.ts b/service/test/validate.test.ts
+index 648250c..80d9c07 100644
+--- a/service/test/validate.test.ts
++++ b/service/test/validate.test.ts
+@@ -5,6 +5,7 @@ import yaml from "js-yaml";
+ import request from "supertest";
+ import { createApp } from "../src/app.js";
+ import { loadSchemas } from "../src/schema-loader.js";
++import { firmwareArtifact } from "./firmware-artifact.js";
+ 
+ const REPO_SCHEMA_ROOT = path.resolve(__dirname, "../../schema/v0.1");
+ const EXAMPLES = path.resolve(__dirname, "../../schema/v0.1/examples");
+@@ -236,3 +237,85 @@ describe("POST /api/validate — relations triple matrix", () => {
+     expect(errs.some((e) => e.keyword === "x-allowedTriples")).toBe(false);
+   });
+ });
++
++describe("POST /api/validate — source lines", () => {
++  it("locates a type error and shows the scalar as written beside its parsed value", async () => {
++    const { text, line } = firmwareArtifact();
++    const res = await request(makeApp())
++      .post("/api/validate")
++      .set("Content-Type", "application/yaml")
++      .send(text);
++    expect(res.status).toBe(200);
++    expect(res.body.valid).toBe(false);
++    expect(res.body.errors).toEqual([
++      {
++        path: "/devices/3/stats/firmware",
++        line,
++        keyword: "type",
++        message: "firmware: 9e10234 (parsed as float Infinity) is not of expected type string",
++        schemaUrl: "https://architecture.webathome.org/schema/v0.1/generated/device.schema.json",
++        value: null,
++      },
++    ]);
++  });
++
++  it("gives every golden-fixture error the line of its node", async () => {
++    for (const name of [
++      "invalid-additional-property.yaml",
++      "invalid-malformed-id.yaml",
++      "invalid-unknown-relationship-type.yaml",
++    ]) {
++      const res = await request(makeApp())
++        .post("/api/validate")
++        .set("Content-Type", "application/yaml")
++        .send(exampleText(name));
++      const errors = res.body.errors as Array<{ path: string; line?: number }>;
++      expect(errors.length).toBeGreaterThan(0);
++      for (const e of errors) expect(e.line, `${name} ${e.path}`).toBeTypeOf("number");
++    }
++  });
++
++  it("locates a relation-triple error on its relation's line", async () => {
++    const text = [
++      `schemaVersion: "0.1"`,
++      `producer: helmcharts`,
++      `capabilities:`,
++      `  - id: cap:test-only`,
++      `    label: Test only`,
++      `    summary: Only used in this unit test.`,
++      `    introduced: 2026-05-27`,
++      `    lifecycle: active`,
++      `nodes:`,
++      `  - id: node:test,11111111-1111-4111-8111-111111111111`,
++      `    label: Test node`,
++      `    summary: Only used in this unit test.`,
++      `    introduced: 2026-05-27`,
++      `    lifecycle: active`,
++      `relations:`,
++      `  - id: rel:bad-triple`,
++      `    source: cap:test-only`,
++      `    target: node:test,11111111-1111-4111-8111-111111111111`,
++      `    type: Composition`,
++      ``,
++    ].join("\n");
++    const res = await request(makeApp())
++      .post("/api/validate")
++      .set("Content-Type", "application/yaml")
++      .send(text);
++    const errs = res.body.errors as Array<{ keyword: string; line?: number }>;
++    expect(errs.find((e) => e.keyword === "x-allowedTriples")?.line).toBe(16);
++  });
++
++  it("locates errors in a JSON body too", async () => {
++    const doc = yaml.load(exampleText("invalid-malformed-id.yaml"));
++    const body = JSON.stringify(doc, null, 2);
++    const res = await request(makeApp())
++      .post("/api/validate")
++      .set("Content-Type", "application/json")
++      .send(body);
++    const e = (res.body.errors as Array<{ path: string; line?: number }>).find(
++      (x) => x.path === "/nodes/0/id",
++    );
++    expect(body.split("\n")[e!.line! - 1]).toMatch(/^\s*"id":/);
++  });
++});
+
+/work/Architecture — P2: git diff a3f595ea2350..b641dc994063
+
+tooling/tests/test_ha_fleet.py | 35 +++++++++++++++++++++++++++++++++++
+ tools/ha-fleet/gen-ha-fleet.py | 32 +++++++++++++++++++++++++++++++-
+ 2 files changed, 66 insertions(+), 1 deletion(-)
+
+diff --git a/tooling/tests/test_ha_fleet.py b/tooling/tests/test_ha_fleet.py
+index c3bb3ad..94eceb3 100644
+--- a/tooling/tests/test_ha_fleet.py
++++ b/tooling/tests/test_ha_fleet.py
+@@ -12,6 +12,7 @@ from types import ModuleType
+ from typing import Any
+ 
+ import pytest
++import yaml
+ 
+ GENERATOR = Path(__file__).resolve().parents[2] / "tools" / "ha-fleet" / "gen-ha-fleet.py"
+ 
+@@ -120,3 +121,37 @@ def test_the_tahoma_gateway_and_the_devices_behind_it_surface_through_overkiz(
+         key=lambda r: r["source"],
+     )
+     assert gaps == ["dropped 1 device(s): drop:sonos"]
++
++
++@pytest.mark.parametrize(
++    "value",
++    ["1e5", "1.5e3", "0o17", "089", "9e10234", "1_0e5", "0o1_7", "0b1_0", "+0x_F", "-.5", "1."],
++)
++def test_strings_a_yaml_1_2_reader_takes_for_numbers_are_written_quoted(
++    gen: ModuleType, value: str
++) -> None:
++    text = gen.dump_yaml({"firmware": value})
++
++    assert text == f"firmware: '{value}'\n"
++    assert yaml.safe_load(text) == {"firmware": value}
++
++
++def test_other_strings_and_non_string_values_are_written_as_plain_safe_dump_writes_them(
++    gen: ModuleType,
++) -> None:
++    doc = {
++        "firmware": "1.2.3",
++        "build": "9e1x",
++        "trailing": "1_",
++        "underscored": "_1",
++        "hex": "0xG",
++        "label": "Hall blind — Ø",
++        "count": 42,
++        "ratio": 1.5e3,
++        "huge": float("inf"),
++        "on": True,
++        "none": None,
++        "versions": ["v1", "2024.10.1"],
++    }
++
++    assert gen.dump_yaml(doc) == yaml.safe_dump(doc, sort_keys=False, width=120, allow_unicode=True)
+diff --git a/tools/ha-fleet/gen-ha-fleet.py b/tools/ha-fleet/gen-ha-fleet.py
+index b26ee5d..b022d90 100644
+--- a/tools/ha-fleet/gen-ha-fleet.py
++++ b/tools/ha-fleet/gen-ha-fleet.py
+@@ -369,6 +369,36 @@ def load_annotations(path: Path) -> dict:
+     return data
+ 
+ 
++class Yaml12SafeDumper(yaml.SafeDumper):
++    """SafeDumper that also quotes strings the validate service reads as numbers.
++
++    PyYAML resolves scalars by YAML 1.1 rules, so it writes e.g. a firmware
++    version "9e10234" plain; the service reads it with js-yaml 4 (YAML 1.2 core
++    schema), where that is a float overflowing to Infinity. The resolvers below
++    cover the YAML 1.2 core int and float grammar plus js-yaml's extensions:
++    `_` digit separators (no trailing `_`), `0b` binary, a sign on any base, and
++    a leading-zero decimal (`089`). A resolved non-str tag makes the emitter
++    quote the string; strings matching neither are written as plain
++    `yaml.safe_dump` writes them.
++    """
++
++
++Yaml12SafeDumper.add_implicit_resolver(
++    "tag:yaml.org,2002:int",
++    re.compile(r"^[-+]?(?:0b[01_]+|0o[0-7_]+|0x[0-9a-fA-F_]+|[0-9][0-9_]*)(?<!_)$"),
++    list("-+0123456789"),
++)
++Yaml12SafeDumper.add_implicit_resolver(
++    "tag:yaml.org,2002:float",
++    re.compile(r"^[-+]?(?:[0-9][0-9_]*(?:\.[0-9_]*)?|\.[0-9_]+)(?:[eE][-+]?[0-9]+)?(?<!_)$"),
++    list("-+.0123456789"),
++)
++
++
++def dump_yaml(doc: dict) -> str:
++    return yaml.dump(doc, Dumper=Yaml12SafeDumper, sort_keys=False, width=120, allow_unicode=True)
++
++
+ def main() -> None:
+     here = Path(__file__).resolve().parent
+     ap = argparse.ArgumentParser(description="Generate the home-automation-fleet artifact from HA.")
+@@ -391,7 +421,7 @@ def main() -> None:
+     out_dir = Path(args.out) / "architecture"
+     out_dir.mkdir(parents=True, exist_ok=True)
+     out_path = out_dir / "home-automation-fleet.yaml"
+-    out_path.write_text(yaml.safe_dump(doc, sort_keys=False, width=120, allow_unicode=True))
++    out_path.write_text(dump_yaml(doc))
+ 
+     print(f"wrote {out_path}: {len(doc['devices'])} devices, {len(doc['relations'])} relations", file=sys.stderr)
+     if gaps:

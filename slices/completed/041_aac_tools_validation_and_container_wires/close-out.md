@@ -4,8 +4,8 @@
      lines are yours to write; everything else is overwritten by the next render.
      `close_out.py show <id>` prints an entry in full. -->
 
-Run: 2026-10-03 08:54 → 09:21 · 4 phases · 0 bail-outs · 1 test round · doc phase at stage
-gate · wrap-up landed · run docs
+Run: 2026-10-03 08:54 → 09:22 · 4 phases · 0 bail-outs · 1 test round · doc phase done · wrap-up
+landed · $13.14 (planner 47 %, research 6 %, rework 0 %)
 
 ## Comes to you
 

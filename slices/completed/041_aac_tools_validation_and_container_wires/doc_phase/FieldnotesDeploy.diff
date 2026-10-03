@@ -1,0 +1,31 @@
+/work/scratch/FieldnotesDeploy — P4: git diff 14ec1f77c561..8212dab0a19d
+
+chart/templates/app-deployment.yaml | 8 ++------
+ 1 file changed, 2 insertions(+), 6 deletions(-)
+
+diff --git a/chart/templates/app-deployment.yaml b/chart/templates/app-deployment.yaml
+index 379a595..ed83c01 100644
+--- a/chart/templates/app-deployment.yaml
++++ b/chart/templates/app-deployment.yaml
+@@ -54,11 +54,6 @@ spec:
+                 secretKeyRef:
+                   name: sse-callback
+                   key: password
+-            # The gateway in this pod. It is the API's own default; stated here because the
+-            # architecture generator reads the wire off the container that sets it, and the
+-            # `mcp` container, which shares the image, has none.
+-            - name: SSE_GATEWAY_URL
+-              value: "http://localhost:3402"
+             - name: BASEURL
+               value: {{ required "baseUrl is required" .Values.baseUrl | quote }}
+             - name: OIDC_ENABLED
+@@ -121,7 +116,8 @@ spec:
+             periodSeconds: 10
+ {{- if .Values.mcp.tokenSecret.name }}
+         # The MCP server, the same image's second entry point, reaching the API over localhost.
+-        # `args`, not `command`: the image's ENTRYPOINT is tini.
++        # `args`, not `command`: the image's ENTRYPOINT is tini. The architecture model draws the
++        # SSE gateway edge onto it too, from the image's default; it does not call the gateway.
+         - name: mcp
+           image: registry:5000/fieldnotes{{ .Values.images.fieldnotes }}
+           imagePullPolicy: Always

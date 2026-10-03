@@ -1,0 +1,5 @@
+root: cexec aac-tools chart-deps    [  OK  ]
+root: cexec iac helm template fieldnotes-prd chart --namespace fieldnotes-prd --values config/prd/values.yaml --set hook.repo=https://github.com/pvginkel/FieldnotesDeploy.git,hook.revision=0123456789abcdef0123456789abcdef01234567,hook.stage=prd,hook.namespace=fieldnotes-prd    [  OK  ]
+root: cexec iac tf-check    [  OK  ]
+root: cexec aac-tools gen-architecture --stage prd --producer fieldnotes-deploy    [  OK  ]
+root: cexec aac-tools arch-validate docs/architecture/fieldnotes-deploy.yaml    [  OK  ]

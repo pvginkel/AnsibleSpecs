@@ -1,0 +1,1 @@
+{"outcome": "done", "summary": "ArgoCDTools 3d5eff7: aac-tools ships Architecture a3f595e's arch-validate byte for byte (md5 766f6ec529466c321bf79cef1507e0db pinned), and gen-architecture dumps through a Yaml12SafeDumper with P2's resolvers so number-like strings are quoted and everything else is unchanged; tests added, aac-tools gate and ruff green.", "refuted": []}

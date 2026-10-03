@@ -1,0 +1,4 @@
+{"outcome": "signoff",
+ "summary": "The SSE_GATEWAY_URL entry and its comment are removed from app, and the optional mcp comment is accurate. Regenerating the prd model before and after adds exactly the mcp SSE gateway Serving edge, with the app edge unchanged.",
+ "details": "code_review_r1.md",
+ "findings": []}

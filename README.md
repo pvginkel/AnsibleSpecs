@@ -48,7 +48,6 @@ Triaged 2026-10-02 from the ANS intake queue (the record: `handovers/triage_2026
 - **038** — Argo CD render gate and Terraform-only pushes: the readonly-account gate refuses a widened `role:readonly`, and a FieldnotesDeploy push touching only `terraform/` reaches `terraform apply`
 - **039** — Cold boot: Keycloak and charts.home: Keycloak availability, break-glass and cold-start chain; the vendored homelab-shared tarballs reverted for a documented by-hand charts.home bootstrap
 - **040** — Alerting and log access: alerts for the 2026-09-25 failure modes, an out-of-cluster dead-man's switch, and a read-only `filebeat-*` Elasticsearch user in OpenBao
-- **041** — aac-tools validation and container wires: type errors show the source line, generated YAML quotes number-like strings, and an `upstream:` wire can be scoped per container
 - **042** — HelmCharts leftovers: KitchenDisplay's deploy key becomes a Jenkins SSH credential, and the openbao role's unconditional writes report changed honestly
 - **043** — Gitblit idle CPU: find what `gitblit-app` spends 0.5–0.8 core on while idle and bring it to near-idle
 
@@ -111,6 +110,7 @@ Triaged 2026-10-02 from the ANS intake queue (the record: `handovers/triage_2026
 | [035 architecture-producers-declarative](slices/completed/035_architecture_producers_declarative/plan.md) | — | — | Architecture producers to declarative: the 77 `Jenkinsfile.architecture` producers onto the style guide's declarative form and an `architectureProducer` helper, with their job configuration moved into the files (cut 2026-10-01) |
 | [036 build-and-deploy-pipelines-declarative](slices/completed/036_build_and_deploy_pipelines_declarative/plan.md) | — | — | Build and deploy pipelines to declarative: T3–T13 and the five ModernAppTemplate apps' `Jenkinsfile` onto the style guide, with `espFirmware`, the podYaml fixes and the `containerTemplates` retirement, and the remaining job configuration moved into the files (cut 2026-10-01) |
 | [037 destroy-stage-pipeline](slices/completed/037_destroy_stage_pipeline/plan.md) | — | — | Destroy Stage pipeline: a Jenkins pipeline (`REPO`, `STAGE`, `APPLY`, dry run by default) that permanently destroys a retired deploy-repo stage's Terraform resources and state through the argocd-hook image, FieldnotesDeploy `dev` first |
+| [041 aac-tools-validation-and-container-wires](slices/completed/041_aac_tools_validation_and_container_wires/plan.md) | — | — | aac-tools validation and container wires: type errors show the source line, generated YAML quotes number-like strings, and an `upstream:` wire can be scoped per container |
 
 **Retired slice numbers.** 001-005 are gaps and are never reused. 001 completed
 (above). 002, 004 and 005 predated the current pipeline, were closed on
