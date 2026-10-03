@@ -2,134 +2,166 @@
   "items": [
     {
       "id": "V01",
-      "area": "R1 — LoadBalancer",
+      "area": "R1 \u2014 LoadBalancer",
       "description": "\"A LoadBalancer Service with no ready endpoints, or no MetalLB `ServiceL2Status` (the DHCP failure itself)\" raises a critical alert on every LoadBalancer Service except KubeCoder environments' (Ruling D3), which the rule recognises by the `app.kubernetes.io/managed-by: kubecoder` label. On the outage's chain (pod not Ready, so the EndpointSlice is not ready, so MetalLB withdraws and no ServiceL2Status exists; handover report.md) the alert fires. A stopped KubeCoder environment raises no alert, and a LoadBalancer Service in a KubeCoder namespace that lacks the label stays in scope. A gap in MetalLB's own metrics does not read as every Service unannounced. Evidence at planning: `metallb_speaker_announced` carries one series per announced Service as `service=\"<ns>/<name>\"`. On 2026-10-03, 42 of 65 LoadBalancer Services were unannounced, all labelled environments in kubecoder-prd/kubecoder-dev. kube-state-metrics v2.20.0 ran with only `--port`/`--resources`, so no Service label was exported then.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "pass",
+      "rationale": "Rules read in the rebased PrometheusDeploy diff (pods/nodes/loadbalancers groups, kubecoder label allow-list, guard on speaker up); promtool tests green in the sweep. Live after sync: kube_service_labels carries the kubecoder label (60 series; 48 at planning, environments grew), LoadBalancerNotAnnounced is quiet, no alert fires for the stopped environments.",
+      "evidence": [
+        "Rules read in the rebased PrometheusDeploy diff (pods/nodes/loadbalancers groups, kubecoder label allow-list, guard on speaker up); promtool tests green in the sweep. Live after sync: kube_service_labels carries the kubecoder label (60 series; 48 at planning, environments grew), LoadBalancerNotAnnounced is quiet, no alert fires for the stopped environments."
+      ]
     },
     {
       "id": "V02",
-      "area": "R1 — DHCP answers",
+      "area": "R1 \u2014 DHCP answers",
       "description": "\"Whether DHCP answers at all: a DISCOVER from outside the pod network\": a probe on srviac sends a relay-style DISCOVER to the DHCP service every few minutes and records the result through srviac's node-exporter. A critical alert fires when no OFFER comes back, and a warning fires when the result is stale or missing. The probe takes no lease. Evidence at planning: one DISCOVER from srviac with giaddr 10.1.0.45, sent from UDP 67, got an OFFER (10.1.1.80) after 3.018 s, from 10.1.0.29:85, and dnsmasq logged DHCPDISCOVER/DHCPOFFER for it (attachments/dhcp-probe.md).",
       "owed_after": "the operator's `ansible-playbook playbooks/site.yml --limit srviac`, which puts the probe on srviac",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "owed",
+      "rationale": "Probe role dhcp_probe installed only on srviac by site.yml --limit srviac (operator). Live: dhcp_probe_success absent and DHCPProbeStale fires, as the plan expects. Settles with the operator's apply; probe wire witnessed in P1.",
+      "evidence": [
+        "Probe role dhcp_probe installed only on srviac by site.yml --limit srviac (operator). Live: dhcp_probe_success absent and DHCPProbeStale fires, as the plan expects. Settles with the operator's apply; probe wire witnessed in P1."
+      ]
     },
     {
       "id": "V03",
-      "area": "R1 — OIDC discovery",
+      "area": "R1 \u2014 OIDC discovery",
       "description": "\"OIDC discovery at auth.ginbov.nl failing\" raises a critical alert. A blackbox exporter in the Prometheus deploy probes https://auth.ginbov.nl/realms/homelab/.well-known/openid-configuration. A probe that cannot run (exporter down, scrape failing) does not read as a passing probe.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "pass",
+      "rationale": "Live on prd after sync: blackbox-exporter pod Running, up{job=\"oidc-discovery\"}=1, probe_success{job=\"oidc-discovery\"}=1, OIDCDiscoveryFailing quiet; OIDCDiscoveryUnprobed (absent()) covers a probe that cannot run, promtool-tested.",
+      "evidence": [
+        "Live on prd after sync: blackbox-exporter pod Running, up{job=\"oidc-discovery\"}=1, probe_success{job=\"oidc-discovery\"}=1, OIDCDiscoveryFailing quiet; OIDCDiscoveryUnprobed (absent()) covers a probe that cannot run, promtool-tested."
+      ]
     },
     {
       "id": "V04",
-      "area": "R1 — pods",
+      "area": "R1 \u2014 pods",
       "description": "\"CrashLoopBackOff or ImagePullBackOff\" raises an alert per Ruling D2: every namespace on the production cluster, severity warning, after the condition has held 15 minutes, one alert per pod. A crash loop's short running spells, and a pull flipping between ErrImagePull and ImagePullBackOff, do not restart the 15 minutes. Evidence at planning: kube-state-metrics v2.20.0 runs with only `--port`/`--resources`, and Prometheus history holds keycloak-prd ImagePullBackOff and dnsmasq-prd dhcp CrashLoopBackOff from 2026-09-25.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "pass",
+      "rationale": "PodStuckInBackOff group read (all namespaces, warning, for 15m, 5m max_over_time look-back); promtool firing/quiet cases green; rule loaded live and quiet. Open design question D1 in close-out.",
+      "evidence": [
+        "PodStuckInBackOff group read (all namespaces, warning, for 15m, 5m max_over_time look-back); promtool firing/quiet cases green; rule loaded live and quiet. Open design question D1 in close-out."
+      ]
     },
     {
       "id": "V05",
-      "area": "R1 — nodes",
+      "area": "R1 \u2014 nodes",
       "description": "\"a node NotReady\" raises a critical alert, cluster-wide (Ruling D2). The window lets a node's ordinary reboot pass.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "pass",
+      "rationale": "NodeNotReady critical, for 10m, cluster-wide; promtool tests green; loaded live and quiet.",
+      "evidence": [
+        "NodeNotReady critical, for 10m, cluster-wide; promtool tests green; loaded live and quiet."
+      ]
     },
     {
       "id": "V06",
-      "area": "R1 — Argo overlap",
+      "area": "R1 \u2014 Argo overlap",
       "description": "\"an Argo app not Healthy. Slice 028 (ANS-118) covers Argo's sync-failed and degraded alerts; check the overlap.\" The overlap is checked, and no new Argo rule is added. ArgoCDSyncStillFailed and ArgoCDHealthStillDegraded (PrometheusDeploy config/prd/values.yaml:306, :336) and D7's events (routes at :422-426) cover sync-failed and degraded. The pod rule catches the outage's Keycloak image pull and DHCP crash loop.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "pass",
+      "rationale": "No Argo rule added in the diff; ArgoCDSyncStillFailed/HealthStillDegraded exist and fired live for pgadmin-prd and filebeat-prd (failed syncs), showing the overlap is covered.",
+      "evidence": [
+        "No Argo rule added in the diff; ArgoCDSyncStillFailed/HealthStillDegraded exist and fired live for pgadmin-prd and filebeat-prd (failed syncs), showing the overlap is covered."
+      ]
     },
     {
       "id": "V07",
-      "area": "R2 — dead-man's switch",
+      "area": "R2 \u2014 dead-man's switch",
       "description": "\"Whole-cluster loss ... an out-of-cluster heartbeat closes that\", through healthchecks.io per Ruling D1. Prometheus raises an alert that always fires, and Alertmanager delivers it to the healthchecks.io ping URL through a webhook receiver, never more than 5 minutes apart. It never reaches Telegram, nothing else reaches the webhook, and it sends no \"resolved\" ping, so pings stop when Prometheus or Alertmanager stops. The ping URL comes from OpenBao kv/eso/prd/prometheus/prd/healthchecks (ping_url) through ESO and never appears in the repo or the rendered config.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "pass",
+      "rationale": "Live: Heartbeat fires in Prometheus and is active in Alertmanager on receiver healthchecks; alertmanager_notifications_total{integration=\"webhook\"}=1, no failures, telegram 0. ExternalSecret alertmanager-healthchecks SecretSynced; url_file only, send_resolved false (tests/alert-routing.py green). Ping arrival at healthchecks.io itself is the operator's side (V08).",
+      "evidence": [
+        "Live: Heartbeat fires in Prometheus and is active in Alertmanager on receiver healthchecks; alertmanager_notifications_total{integration=\"webhook\"}=1, no failures, telegram 0. ExternalSecret alertmanager-healthchecks SecretSynced; url_file only, send_resolved false (tests/alert-routing.py green). Ping arrival at healthchecks.io itself is the operator's side (V08)."
+      ]
     },
     {
       "id": "V08",
-      "area": "R2 — dead-man's switch drill",
+      "area": "R2 \u2014 dead-man's switch drill",
       "description": "When Alertmanager's pings stop, healthchecks.io notifies the operator over Telegram (Ruling F1).",
       "owed_after": "the operator's confirmation, after a drill that stops the pings past the check's period plus grace, that healthchecks.io's Telegram notification arrived",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "owed",
+      "rationale": "Operator drill: stop Alertmanager's pings past the check's period plus grace and confirm healthchecks.io's Telegram notification arrives.",
+      "evidence": [
+        "Operator drill: stop Alertmanager's pings past the check's period plus grace and confirm healthchecks.io's Telegram notification arrives."
+      ]
     },
     {
       "id": "V09",
-      "area": "R3 — read-only user",
+      "area": "R3 \u2014 read-only user",
       "description": "\"create a read-only Elasticsearch user that can only read the `filebeat-*` indices, and store its credential in OpenBao\", with the scope Ruling review-Q1 sets in place of \"only read the `filebeat-*` indices\": the user is read-only over all data and can log into Kibana. The Elasticsearch setup Job creates it. It reads every data index, through the Elasticsearch API and in Kibana (Discover), and it can write nothing, manage nothing in the cluster or its indices, and edit nothing in Kibana. Witnessed live under Ruling D4's single read of the password: a write is refused, and so is an administrative call. Its password is at OpenBao kv/eso/prd/elasticsearch/prd/filebeat-reader (password), reaches the Job through ESO, and appears in no repo. prd's ESO reads eso/prd/* (Ansible ansible/inventories/prd/group_vars/openbao.yml:99), so the KubeCoder card can read the same leaf. Evidence at planning: prd runs Elasticsearch 8.15.0 (its log, version[8.15.0]), whose built-in `viewer` role the ruling names as matching this shape.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "pass",
+      "rationale": "Live as reader (password read once from OpenBao, D4): _security/_authenticate = reader/[viewer]; _count on filebeat-* = 24.4M docs; PUT doc refused (index privilege), PUT cluster setting refused, create index refused; Kibana login as reader works (roles viewer), saving a data view refused. Setup Job elasticsearch-setup-f76bf Complete on the pinned image.",
+      "evidence": [
+        "Live as reader (password read once from OpenBao, D4): _security/_authenticate = reader/[viewer]; _count on filebeat-* = 24.4M docs; PUT doc refused (index privilege), PUT cluster setting refused, create index refused; Kibana login as reader works (roles viewer), saving a data view refused. Setup Job elasticsearch-setup-f76bf Complete on the pinned image."
+      ]
     },
     {
       "id": "V10",
-      "area": "R3 — runbook route",
+      "area": "R3 \u2014 runbook route",
       "description": "\"Then the Kibana route ANS-164 put in docs/runbooks/argocd.md for a replaced hook's log can be checked, and it becomes a real answer\", confirmed through Kibana per Ruling review-Q1. Logged into Kibana with the new credential, the route returns a current Argo CD hook pod's lines. The equivalent API query the runbook gains returns the same pod's lines from Elasticsearch with the same credential. The test phase makes both, reading the password once under Ruling D4. A query sent to Elasticsearch directly does not stand in for the Kibana route. The runbook's route (docs/runbooks/argocd.md:156-177) then drops \"unconfirmed\" and no longer names tf-presync-fieldnotes-prd-sx956 as the check owed. It gives Kibana at the address where it answers, and reads as an answer for whoever holds the credential: a person in Kibana, an agent through ELASTIC_URL/ELASTIC_USER/ELASTIC_PASSWORD. The Ansible repo reaches origin only after both queries have returned the pod's lines. Evidence at planning: Kibana answers at http://kibana.home with its login form (/internal/security/login_state lists the basic provider), and https://kibana.home, which the route names today, lands on another service (witnessed 2026-10-03).",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "pass",
+      "rationale": "Both forms confirmed as reader before the Ansible push. API: the runbook's two curls as written on fieldnotes-prd (35 attempts listed newest first; the newest attempt's 70 lines returned) and prometheus-prd (today's attempts incl. the failed ones). Kibana: login at http://kibana.home, /internal/search/es on filebeat-* and the console proxy returned the hook pod's 106 lines through Kibana (browser Discover not driven; the saved filebeat-* view exists, so the ad-hoc fallback is unwitnessed - P2 in close-out). https://kibana.home answers 200 from another service, as the runbook says.",
+      "evidence": [
+        "Both forms confirmed as reader before the Ansible push. API: the runbook's two curls as written on fieldnotes-prd (35 attempts listed newest first; the newest attempt's 70 lines returned) and prometheus-prd (today's attempts incl. the failed ones). Kibana: login at http://kibana.home, /internal/search/es on filebeat-* and the console proxy returned the hook pod's 106 lines through Kibana (browser Discover not driven; the saved filebeat-* view exists, so the ad-hoc fallback is unwitnessed - P2 in close-out). https://kibana.home answers 200 from another service, as the runbook says."
+      ]
     },
     {
       "id": "V11",
       "area": "Setup Job rerun",
       "description": "The Elasticsearch setup Job runs again on any change to its spec, not only on an image-pin change (today its name derives from the pin alone, ElasticsearchDeploy chart/templates/elasticsearch-setup-job.yaml:6). No Argo CD sync of elasticsearch-prd fails while the slice's two commits to that repo (the phase's and CI's pin) land.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "pass",
+      "rationale": "Pushed ES P6 first, DockerImages after. Job elasticsearch-setup-c47cc Complete on the old image, then CI pin 5018ffb renamed it to elasticsearch-setup-f76bf, Complete; app history shows 64d68bf, 56a1cbd, 5018ffb deployed, elasticsearch-prd Synced/Healthy, no failed sync. ExternalSecret elasticsearch-reader Ready.",
+      "evidence": [
+        "Pushed ES P6 first, DockerImages after. Job elasticsearch-setup-c47cc Complete on the old image, then CI pin 5018ffb renamed it to elasticsearch-setup-f76bf, Complete; app history shows 64d68bf, 56a1cbd, 5018ffb deployed, elasticsearch-prd Synced/Healthy, no failed sync. ExternalSecret elasticsearch-reader Ready."
+      ]
     },
     {
       "id": "V12",
       "area": "Alert routing",
       "description": "Every alert this slice adds, except the heartbeat, reaches the Telegram receiver its severity picks (loud for critical, silent otherwise) and gets a \"resolved\". tests/alert-routing.py asserts that, and asserts the heartbeat as its one exception.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "pass",
+      "rationale": "tests/alert-routing.py green in the driver sweep (PrometheusDeploy root test); heartbeat asserted as the one exception; live Alertmanager routes Heartbeat to healthchecks and nothing else to it.",
+      "evidence": [
+        "tests/alert-routing.py green in the driver sweep (PrometheusDeploy root test); heartbeat asserted as the one exception; live Alertmanager routes Heartbeat to healthchecks and nothing else to it."
+      ]
     },
     {
       "id": "V13",
       "area": "Coverage",
       "description": "No coverage is lost: every existing rule group's promtool tests and the routing assertions still run and pass. Each new rule group has promtool tests with a firing and a quiet case at every edge it claims.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "pass",
+      "rationale": "PrometheusDeploy tests/alert-rules.sh and alert-routing.py green in the sweep; new groups have tests/alert-rules/{pods,nodes,loadbalancers,oidc-discovery,dhcp,heartbeat}.yml with firing and quiet cases; rules all loaded live.",
+      "evidence": [
+        "PrometheusDeploy tests/alert-rules.sh and alert-routing.py green in the sweep; new groups have tests/alert-rules/{pods,nodes,loadbalancers,oidc-discovery,dhcp,heartbeat}.yml with firing and quiet cases; rules all loaded live."
+      ]
     },
     {
       "id": "V14",
       "area": "srviac play",
       "description": "The srviac play that installs the DHCP probe reports changed=0 on a second run, and its --check --diff shows the first run's changes.",
       "owed_after": "the operator's `ansible-playbook playbooks/site.yml --limit srviac` (check mode, then apply, then a second apply)",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "owed",
+      "rationale": "Operator: cd ansible && cexec iac poetry run ansible-playbook playbooks/site.yml --limit srviac --check --diff, then without --check, then once more expecting changed=0. Static read: copy/template tasks are naturally idempotent; the timer task is skipped under --check (B2).",
+      "evidence": [
+        "Operator: cd ansible && cexec iac poetry run ansible-playbook playbooks/site.yml --limit srviac --check --diff, then without --check, then once more expecting changed=0. Static read: copy/template tasks are naturally idempotent; the timer task is skipped under --check (B2)."
+      ]
     },
     {
       "id": "V15",
-      "area": "Architecture — healthchecks.io",
+      "area": "Architecture \u2014 healthchecks.io",
       "description": "healthchecks.io is modelled in the architecture artifact (Ruling review-A1). It is declared as an external service in the Architecture repo, the way Telegram's Bot API is (Architecture docs/architecture/external-services.yaml:29-39). PrometheusDeploy's judgment layer names it in Alertmanager's served_by (architecture.yaml:18-21, which names only Telegram's Bot API at planning), so the published architecture draws healthchecks.io serving Alertmanager. The Architecture repo is public, and the entry carries nothing of the operator's check.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "pass",
+      "rationale": "Architecture d45c7ff pushed (external-services.yaml declares svc:healthchecks-io); PrometheusDeploy architecture.yaml served_by names it (gen-architecture/arch-validate green in the PrometheusDeploy test). No ping URL in either repo.",
+      "evidence": [
+        "Architecture d45c7ff pushed (external-services.yaml declares svc:healthchecks-io); PrometheusDeploy architecture.yaml served_by names it (gen-architecture/arch-validate green in the PrometheusDeploy test). No ping URL in either repo."
+      ]
     },
     {
       "id": "V16",
       "area": "Reader password rotation",
       "description": "ElasticsearchDeploy's README names the reader-password rotation path (Ruling review-A2): `bao kv put` the new value, then make the setup Job rerun by deleting it so that Argo CD recreates it. Followed as written, the path leaves Elasticsearch on the new password. It accounts for ESO's hourly refresh of the Secret (ElasticsearchDeploy chart/values.yaml:39-40). It also accounts for Argo CD not recreating a deleted Job on its own: the app auto-syncs with selfHeal false (ArgoCDDeploy releases/templates/applications.yaml:67-70, and live), and auto-sync skips a revision it has already synced (argo-cd v3.5.1 controller/appcontroller.go:2401-2403). Nothing re-applies a changed password automatically.",
-      "verdict": null,
-      "rationale": "",
-      "evidence": []
+      "verdict": "pass",
+      "rationale": "Read ElasticsearchDeploy README section \"The read-only user reader\": bao kv put from stdin, ESO force-sync and wait for refreshTime, delete the Job, Argo CD Sync, check with _security/_authenticate; accounts for the hourly ESO refresh and selfHeal false. Convergence onto the first password witnessed live; a rotation itself was not run.",
+      "evidence": [
+        "Read ElasticsearchDeploy README section \"The read-only user reader\": bao kv put from stdin, ESO force-sync and wait for refreshTime, delete the Job, Argo CD Sync, check with _security/_authenticate; accounts for the hourly ESO refresh and selfHeal false. Convergence onto the first password witnessed live; a rotation itself was not run."
+      ]
     }
   ]
 }

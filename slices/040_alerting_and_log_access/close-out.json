@@ -340,6 +340,78 @@
       "wrap_up": null,
       "strike": null,
       "ruling": null
+    },
+    {
+      "id": "B4",
+      "kind": "defect",
+      "grade": "minor",
+      "headline": "ArgoCDTools argocd-hook: terraform init fails with 'non-fast-forward update' on the TerraformState backend when hooks run close together",
+      "body": [
+        "Test phase r1, 2026-10-03: right after the pushes, prometheus-prd's PreSync hook (tf-presync-prometheus-prd-*) failed three attempts in a row (08:18-08:21Z): terraform-backend-git logged 'non-fast-forward update' and answered 500 on GET of argocd/PrometheusDeploy/prd/terraform.tfstate, so 'terraform init' gave up after 3 attempts; Argo CD retry limit 3 exhausted, app OutOfSync/Failed. elasticsearch-prd's hook had run at the same time. A manual sync (operation patched with the same revision) then succeeded. pgadmin-prd and filebeat-prd show the same end state (Failed, retried 3 times, 07:34-07:35Z, before this phase's pushes) and still raise ArgoCDSyncStillFailed. Cause not confirmed: concurrent hooks pushing/pulling the shared TerraformState clone is the likely one."
+      ],
+      "consequence": "A deploy-repo push that lands while another hook is running can leave its app OutOfSync/Failed until someone re-syncs it; ArgoCDSyncStillFailed pages for it.",
+      "proposal": "card it against ArgoCDTools; re-sync pgadmin-prd and filebeat-prd now",
+      "evidence": "witnessed",
+      "author": "test-agent, test phase r1, hook pod logs of tf-presync-prometheus-prd-rlcvn",
+      "labels": {
+        "trigger": "ordinary-condition",
+        "impact": "broken",
+        "signal": "loud",
+        "fix": "unknown",
+        "area": "sensitive",
+        "repo": "ArgoCDTools"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
+    },
+    {
+      "id": "P2",
+      "kind": "prose",
+      "grade": "nit",
+      "headline": "Ansible docs/runbooks/argocd.md: the Kibana route says to create an ad-hoc data view 'if none is saved', but prd already holds a saved filebeat-* view",
+      "body": [
+        "Live 2026-10-03, as reader: GET /api/data_views lists filebeat-* and logstash-http-*; a data view save as reader is refused (insufficient access). The Kibana form was confirmed through Kibana's own HTTP API with the reader's session (login, /internal/search/es on filebeat-* returned the pod's 106 lines, console proxy likewise); the browser-only step 'Use without saving' was not witnessed, and is not needed while the saved view exists."
+      ],
+      "consequence": "none — a reader who finds the saved view is unaffected; the ad-hoc fallback stays unwitnessed.",
+      "proposal": "close",
+      "evidence": "witnessed",
+      "author": "test-agent, test phase r1",
+      "labels": {
+        "trigger": "ordinary-condition",
+        "impact": "none",
+        "signal": "none",
+        "fix": "one-edit",
+        "area": "plain",
+        "repo": "Ansible"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
+    },
+    {
+      "id": "E3",
+      "kind": "event",
+      "grade": null,
+      "headline": "prometheus-prd's first sync failed on the TerraformState error (B4); the test phase re-synced it by hand",
+      "body": [
+        "After the PrometheusDeploy push the sync failed three times (see B4); the test phase patched an operation sync of revision ffe0364 into the Application with the prd-write kubeconfig, and it succeeded. Everything slice-040 then verified live ran on that sync."
+      ],
+      "consequence": "none — resolved in the run",
+      "proposal": null,
+      "evidence": "witnessed",
+      "author": "test-agent, test phase r1",
+      "labels": {
+        "trigger": "ordinary-condition",
+        "impact": "none",
+        "signal": "none"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
     }
   ]
 }
