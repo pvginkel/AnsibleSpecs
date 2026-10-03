@@ -236,6 +236,30 @@ push.
   (`tests/render-consumer.sh`) asserts the ConfigMap is in the render, is not a hook, and
   carries the revision the render was given. Nothing is pushed here: P4 publishes.
 
+**Done (P3).** Charts 8fc4717 on `phase/038-P3`: homelab-shared **0.4.0**, `dist/homelab-shared-0.4.0.tgz`
+committed with the bump. The hook include now renders first an ordinary ConfigMap
+`tf-presync-revision` in `hook.namespace`, `data.revision: "<hook.revision>"`, no annotations;
+then the RoleBinding and Job unchanged. `kc project lint` and `kc project test` green.
+
+Later phases:
+- P4 — the version to wait for and pin is `0.4.0`; the object to look for is ConfigMap
+  `tf-presync-revision` in `fieldnotes-prd` (edited in place).
+- P5 — the bump is `0.3.1` → `0.4.0` (edited in place).
+- Test phase — the live proof can read `kubectl -n fieldnotes-prd get cm tf-presync-revision`;
+  its `data.revision` is the synced SHA.
+
+Record:
+- Version 0.4.0, not 0.3.2: the include renders a new object into every consumer's app namespace.
+- `hook.revision`'s `required` moved ahead of the ConfigMap into one `$revision`, used by the
+  ConfigMap and the Job's second arg; the error message is unchanged.
+- The header comment cites argo-cd decisions.md D67 and says why the object is not a hook and
+  lives in the app's namespace.
+- `tests/render-consumer.sh` reads the ConfigMap document whole (an annotation or wrong namespace
+  fails it — witnessed by adding a PreSync annotation: red) and renders a second revision via
+  `--set hook.revision=…` to show the object follows it.
+- README's example pin moved to `"0.4.0"`, as the 0.3.1 publish did; its prose about what the
+  include renders is left to the doc phase.
+
 ### P4 — FieldnotesDeploy pins the new library version, once charts.home serves it
 
 Target: github:pvginkel/FieldnotesDeploy
@@ -244,16 +268,17 @@ FieldnotesDeploy is not one of this environment's checkouts; the driver clones i
 clean clone already there) at `/work/scratch/FieldnotesDeploy` for this slice alone.
 
 The phase opens by publishing: it pushes Charts' `main` — P3's reviewed, merged commit — and
-waits until `https://charts.home/index.yaml` lists the new version. That push runs `IaC/Charts`,
+waits until `https://charts.home/index.yaml` lists the new version, `0.4.0`. That push runs `IaC/Charts`,
 which builds the charts-home image, commits its build pin into ChartsDeploy, and Argo syncs
 charts-prd (Charts README § How a publish reaches charts.home). No app changes yet: no consumer
 pins the new version.
 
 Then FieldnotesDeploy's library version moves to the new one wherever the repo states it — its
-homelab-shared pin (`chart/Chart.yaml:8`, `"0.3.1"` today) and its re-resolved `chart/Chart.lock`;
+homelab-shared pin (`chart/Chart.yaml:8`, `"0.3.1"` today, to `"0.4.0"`) and its re-resolved `chart/Chart.lock`;
 no test of its own pins the version — and nothing else changes. The gate (`kc project test`,
 whose first step `chart-deps` resolves the lock against charts.home) is green, and its prd render
-carries the ConfigMap with the revision the gate passes. Nothing is pushed: this commit is the
+carries the ConfigMap `tf-presync-revision` (in the app's namespace, `data.revision`) with the
+revision the gate passes. Nothing is pushed: this commit is the
 first push of the test phase's live proof.
 
 ### P5 — Every other deploy repo pins the new library version, ready to push in batches
@@ -261,7 +286,7 @@ first push of the test phase's live proof.
 Target: root
 
 Ruling D2. Every deploy repo whose chart pins homelab-shared, FieldnotesDeploy aside (P4), gets
-the same bump — its library version wherever the repo states it, and nothing else (ruling r1 F1):
+the same bump, `0.3.1` → `0.4.0` — its library version wherever the repo states it, and nothing else (ruling r1 F1):
 the `chart/Chart.yaml` pin, its re-resolved `Chart.lock`, and any test of the repo's own that pins
 the version. The one known is KubeCoderDeploy's `tests/render-chart.py` `LIBRARY` (`:26`), which
 `check_library` (`:209-213`) holds `chart/Chart.yaml`'s dependency list equal to. The set comes
@@ -283,7 +308,7 @@ at planning pins `0.3.1` (Grounding). ArgoCDDeploy pins nothing and is not bumpe
   has one, is run in this phase (KubeCoderDeploy's, like FieldnotesDeploy's, opens with
   `chart-deps`, which resolves against charts.home); a repo without one is proven by resolving
   its dependencies against charts.home and rendering. Either way the bumped render carries the
-  ConfigMap. The bump turns no gate red: a red it causes because the repo states the version in
+  ConfigMap `tf-presync-revision`. The bump turns no gate red: a red it causes because the repo states the version in
   another place makes that place part of the bump; a red it causes for any other reason is
   outside a library-version bump and is raised, not worked around. A red the parent commit
   already shows is not the bump's: it is recorded as such, with the parent's result, and goes in
