@@ -4,9 +4,28 @@
      lines are yours to write; everything else is overwritten by the next render.
      `close_out.py show <id>` prints an entry in full. -->
 
-Run: <not yet stamped>
+Run: 2026-10-03 08:54 → 09:17 · 4 phases · 0 bail-outs · 1 test round · doc phase at stage
+writer · run docs
+
+## Comes to you
+
+### A1 — Roll the Architecture service to prod, then run arch-validate on a 9e10234 firmware artifact (V04)
+
+**Proposal:** do it: promote, then settle V04 with the command
+
+**Consequence:** Until promoted, production validation errors lack source lines; nothing else breaks.
+
+**Route:** to you — an action
+**Disposition:**
 
 ## For the wrap-up
+
+### B1 — Architecture service: a type error on an empty value prints an empty source scalar · minor
+
+**Consequence:** an author who leaves a required string blank gets a slightly garbled message; the line and 'parsed as null' still identify the problem
+
+**Route:** the wrap-up — fix
+**Disposition:**
 
 ### I1 — Architecture: quote YAML-1.2 number-like strings in the collector's published architecture.yaml too?
 
@@ -17,3 +36,19 @@ generators now do, but nothing misreads it today, so it does not belong in this 
 
 **Route:** the wrap-up — a small change, within its bar
 **Disposition:**
+
+## Closed
+
+### T1 — ArgoCDTools aac-tools: no test pins that gen-architecture's written artifact goes through the quoting dumper · minor
+
+**Route:** closed — it cannot show with the code as it is
+**Disposition:**
+
+### B2 — Architecture service: on a JSON body with duplicate keys, the error line and source scalar come from the wrong occurrence · nit
+
+**Route:** closed — it needs a fault
+**Disposition:**
+
+## Record
+
+### E1 — The driver left a scratch clone at /work/scratch/FieldnotesDeploy (`Target: github:pvginkel/FieldnotesDeploy`)
