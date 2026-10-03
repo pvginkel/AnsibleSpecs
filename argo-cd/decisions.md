@@ -191,6 +191,12 @@ down means no new syncs for migrated apps (running workloads unaffected). *Proof
 A):* the repo-server trusts the homelab root CA for a dependency fetch, not just a registered
 repository; fallback is plain HTTP (internal-only, tarballs unsigned either way).
 
+> **Amended 2026-10-03 (slice 039): the trap is not answered by vendoring.** No deploy repo
+> commits the library tarball — vendoring it into ChartsDeploy and RegistryDeploy was tried and
+> reverted. A cluster rebuilt empty, or a broken charts.home release, is brought back by hand
+> (Ansible `docs/runbooks/cluster-bootstrap.md`); design.md "Charts and charts.home" has the
+> chain. The rest stands.
+
 **D18 — Upstream-chart-only apps use a multi-source Application; no wrapper charts.** Decided
 2026-08-12 (notes). Source 0 is the chart from its Helm repo, `targetRevision` carrying the
 chart version; source 1 is the deploy repo with `ref: values` supplying
