@@ -43,6 +43,15 @@
   (`/work/AnsibleSpecs/argo-cd/decisions.md`, Terraform and the PreSync hook section) gets a new
   decision recording that every push syncs and runs the hook, and why. That is a doc task, so it
   is a phase.
+- Ruling (2026-10-03, D3 — operator: "Agree"): **the FieldnotesDeploy phase publishes the library.**
+  It opens by pushing Charts' `main` — the library change already reviewed and merged — and waits
+  until https://charts.home/index.yaml lists the new version before bumping FieldnotesDeploy's pin.
+  That push is authorized by this ruling (it changes no app: every consumer still pins `0.3.1`).
+- Ruling (2026-10-03, D4 — same word): **the deploy-repo pushes are the test phase's.** The rollout
+  phase prepares every bump commit and its ledger and pushes nothing. The test phase pushes
+  FieldnotesDeploy's bump, then the comment-only terraform/ commit, checks the live proof, and only
+  then pushes the ledger's repos in batches — rebasing any repo whose origin moved and re-checking
+  its pending-Terraform status just before its push.
 - Ruling (2026-10-03): the registry-owned hook (one global pin instead of per-repo pins) was
   weighed and parked — operator: "Ow this feels far too cumbersome. Let's stick to the plan. If
   it bothers me again, I'll revisit this." Filed as ANS-199 (Later). Not in this slice.

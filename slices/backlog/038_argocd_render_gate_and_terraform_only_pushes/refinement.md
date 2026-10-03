@@ -84,6 +84,84 @@ the repo, with nothing saying which — and no next bump is scheduled.
 
 **Operator.** "D1/D2 are agreed as is." (chat, 2026-10-03)
 
+## D3 — Publish the new library version to charts.home mid-run from the FieldnotesDeploy phase, or stop this slice at the publish
+
+**Context.** D1 and D2 stand: the library's hook include also renders an ordinary object carrying
+the synced commit, so every push syncs and applies, and the bump rolls out estate-wide in this
+slice once FieldnotesDeploy proves it live. The plan is five phases — the Argo CD decision register
+takes the new decision; ArgoCDDeploy's read-only gate is fixed; the library change goes into the
+Charts repo as a new version; FieldnotesDeploy bumps its pin; the other ~47 deploy repos get their
+bump commits prepared but not pushed, with a list of the apps whose pending Terraform the push will
+apply. Settled since round one: the new object lands in each app's own namespace, so it is pruned
+with the app.
+
+**The ask.** A new library version reaches charts.home only by a push of the Charts repo's main,
+which builds the charts.home image and rolls it out on prd. The two deploy-repo phases cannot even
+be built until charts.home serves the version — their gate resolves the chart's dependencies
+against it. The run loop pushes nothing before its test phase unless a ruling says so, so a ruling
+is needed on who pushes Charts, and when.
+
+**Background.** Publishing changes no app: every consumer still pins the old version until its own
+bump commit. A published version is immutable, so a fault found afterwards costs another patch
+version, never a rewrite.
+
+**Why yours.** It puts a prd push — reviewed, but not yet proven live — in the middle of the run,
+ahead of the point where the run otherwise pushes.
+
+**Recommendation.** The FieldnotesDeploy phase opens by pushing Charts' main, which by then holds
+the library change reviewed and merged, and waits until charts.home lists the new version before
+bumping the pin. Trade-off: the version sits on prd's charts.home before the live proof; nothing
+running changes, and a fault costs one more patch version.
+
+**The other way.** Stop the run at the publish: this slice ships the gate, the decision and the
+library, the test phase publishes, and FieldnotesDeploy's bump, the live proof and the rollout move
+to a follow-up slice. It gives up D2's "in this slice" and leaves the defect live until the
+follow-up runs. (Pushing from the library phase itself, before its review, carries the same cost
+plus an unreviewed tarball, and is not listed.)
+
+**If this is wrong.** A library fault reaches charts.home before the live proof and costs a patch
+version; no running app changes.
+
+**Operator.** "Agree" (chat, 2026-10-03)
+
+## D4 — Push the ~47 deploy-repo bumps from the test phase after the live proof, or from their own phase
+
+**Context.** D2 said the rollout is its own phase that pushes after FieldnotesDeploy proves the new
+version live; the live-proof item put FieldnotesDeploy's pushes in the test phase, which runs after
+every phase. Read together, the rollout's pushes can only follow the test phase's proof, and the
+plan is written that way. Settled since round one and bearing on the rollout: the repo that serves
+charts.home commits its library tarball alongside its chart (what deploys charts.home must not
+need charts.home), so its bump commits the new tarball too; KubeCoder's prd stage tracks a separate
+branch that only your promote job moves, so its bump lands on main for the dev stage and prd takes
+it at your next promotion.
+
+**The ask.** When the ~47 bump commits go out: all from the test phase once the proof holds, or
+each phase pushing its own.
+
+**Background.** Every deploy-repo push queues one Jenkins architecture build and one Argo sync with
+a hook apply on prd. Jenkins' daily image-pin commits move origins, so a bump prepared in its phase
+may need rebasing before it is pushed, and an app's pending-Terraform status is read against its
+last sync, so it can change between preparation and push.
+
+**Why yours.** It is a choice between every prd push following its review and a shorter end to the
+run.
+
+**Recommendation.** As the plan is written: the rollout phase prepares every bump commit and a
+ledger of them, and pushes nothing; the test phase pushes FieldnotesDeploy's bump, then the
+comment-only Terraform commit, checks that Argo synced and the hook ran, and only then pushes the
+ledger in batches — rebasing any repo whose origin moved and re-reading its pending-Terraform
+status just before its push. Trade-off: the test phase carries ~47 pushes and their rebases, a long
+mechanical tail at the end of the run.
+
+**The other way.** The FieldnotesDeploy phase pushes and proves itself, and the rollout phase
+pushes its own batches, leaving the test phase to verify. It sends ~47 prd pushes out before that
+phase's review, and takes the proof out of the test phase.
+
+**If this is wrong.** Either an unreviewed bump reaches ~47 apps on prd, or the run ends in a long
+test phase.
+
+**Operator.** "Agree" (chat, 2026-10-03)
+
 ## Open facts — questions only you can answer
 
 None.
