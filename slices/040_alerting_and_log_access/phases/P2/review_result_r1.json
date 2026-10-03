@@ -1,0 +1,11 @@
+{"outcome": "issues",
+ "summary": "The pod and node rules and the KubeCoder exemption meet the phase. LoadBalancerNotAnnounced's `and on () metallb_speaker_announced` guard silences it when MetalLB withdraws every Service while its speakers are scraped and up, leaving only a silent warning (contradicts D3/V01; reproduced with promtool).",
+ "details": "code_review_r1.md",
+ "findings": [
+  {"id": "F1", "severity": "Major", "impact": "blocking", "category": "functional", "anchor": "repro-trace",
+   "summary": "MetalLB withdrawing every Service, with speakers up, raises no critical LoadBalancerNotAnnounced; only the silent MetalLBAnnouncementsBlind warning"},
+  {"id": "F2", "severity": "Minor", "impact": "advisory", "category": "functional", "anchor": "none",
+   "summary": "No test pins the `> 0` filter (the mutation survives), contrary to the done-record's claim"},
+  {"id": "F3", "severity": "Minor", "impact": "advisory", "category": "functional", "anchor": "none",
+   "summary": "PodStuckInBackOff fires briefly on a loop that held ~11m, under D2's 15m; documented accepted cost"}
+ ]}
