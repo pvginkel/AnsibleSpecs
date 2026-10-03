@@ -481,6 +481,14 @@ which wins. Any later library default has to be read the same way; a plain `.Val
 library template is always the app's value. The four arguments are `required`-guarded, so a
 chart that forgets one fails to render rather than passing an empty argument.
 
+Beside the Job and its PreSync RoleBinding (D33), the template renders one object that is **not**
+a hook (D67): ConfigMap `tf-presync-revision` in `hook.namespace`, no annotations, `data.revision`
+the same `hook.revision` the Job takes as its second argument. Hooks are outside Argo's diff and
+`terraform/` and the stage tfvars outside `chart/`, so without it a push touching only those
+rendered identically and auto-sync never reached the hook; with it every commit renders
+differently, so every push syncs and applies. It lives in the app's namespace so it is pruned with
+the app.
+
 **Upstream-chart apps** include the template from their companion `chart/` (D56), the third
 source of the multi-source Application, which carries the same hook parameters as a local chart.
 A `hook/` directory of rendered manifests was the earlier plan; a directory source cannot receive
