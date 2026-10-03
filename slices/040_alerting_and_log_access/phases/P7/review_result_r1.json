@@ -1,0 +1,9 @@
+{"outcome": "issues",
+ "summary": "The runbook edit meets P7 except its new API form: size 1000 sorted ascending with no time bound returns the oldest attempts' lines across the 7-day window, so for any app that synced more than about ten times the replaced attempt's lines are silently cut.",
+ "details": "code_review_r1.md",
+ "findings": [
+  {"id": "F1", "severity": "Major", "impact": "blocking", "category": "functional", "anchor": "repro-trace",
+   "summary": "argocd.md API query (size 1000, asc, no time range) returns the oldest ~10 attempts and silently omits the current one for frequently-synced apps (fieldnotes-prd: 35 pods, ~3,500 lines in 7d)"},
+  {"id": "F2", "severity": "Minor", "impact": "advisory", "category": "comment-prose", "anchor": "none",
+   "summary": "argocd.md states agents hold ELASTIC_URL/USER/PASSWORD (= elasticsearch.home) as present fact; that is KC-124's, not yet delivered"}
+ ]}
