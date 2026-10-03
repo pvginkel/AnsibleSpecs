@@ -265,7 +265,12 @@
       },
       "notes": [],
       "wrap_up": null,
-      "strike": null,
+      "strike": {
+        "reason": "resolved in PrometheusDeploy 0fe00d8: tests/alert-rules/loadbalancers.yml gains a case where the speaker writes 0 for dhcp from 5 m; it fires at 15 m. kc project test --project root green; with '> 0' deleted, tests/alert-rules.sh fails that case (got [])",
+        "by": "wrap-up",
+        "date": "2026-10-03",
+        "commit": "0fe00d8"
+      },
       "ruling": null
     },
     {
@@ -367,7 +372,14 @@
         "repo": "ArgoCDTools"
       },
       "notes": [],
-      "wrap_up": null,
+      "wrap_up": {
+        "outcome": "left",
+        "by": "wrap-up",
+        "date": "2026-10-03",
+        "text": [
+          "The trigger holds: ordinary-condition. Read in ArgoCDTools 3b8e30a and upstream terraform-backend-git v0.1.11. Each hook pod starts its own daemon (presync/backend.py provide()). Every hook pod and iac commit to the same TerraformState main (STATE_REPO_URL/REF). The daemon clones that repository once into memory at Depth 1 (storages/git/git.go:210-225) and keeps the clone for the pod's life (client.go Connect). Every GetState and LockState then runs a go-git Pull of main into that shallow clone (client.go:243-249, 128-134; git.go:311). Another writer pushing to main after the clone (another app's hook, a destroy, an iac apply) can make that pull fail with go-git's 'non-fast-forward update', and the GET returns 500. terraform init's own retries reuse the same shallow clone, so all three attempts fail alike, as the hook log shows. A deploy-repo push lands while other hooks are writing state whenever several deploy repos are pushed together or Argo CD syncs apps in parallel, as this slice's test phase did. Nothing beyond an ordinary push is needed. The signal holds too: loud. The failed hook fails the sync. Retries exhausted leave a SyncError condition, and ArgoCDSyncStillFailed (PrometheusDeploy config/prd/values.yaml:321) fires on that after 10 m; the test phase saw it firing for pgadmin-prd and filebeat-prd. The sensitive area (concurrency) and fix unknown also hold. Possible fixes are a deep clone (an upstream patch or fork), serialising hooks' state writes, or restarting the daemon on this error. All three are design calls in ArgoCDTools, which this slice did not touch."
+        ]
+      },
       "strike": null,
       "ruling": null
     },
@@ -393,7 +405,12 @@
       },
       "notes": [],
       "wrap_up": null,
-      "strike": null,
+      "strike": {
+        "reason": "resolved in Ansible bccf8e1: docs/runbooks/argocd.md now says to pick the saved filebeat-* data view prd holds, and to create the ad-hoc one only should it be gone. kc project test --project root green; build and lint declare nothing for root (exit 3), and the ansible/terraform lint components do not cover docs/",
+        "by": "wrap-up",
+        "date": "2026-10-03",
+        "commit": "bccf8e1"
+      },
       "ruling": null
     },
     {
