@@ -1,0 +1,4 @@
+{"outcome": "signoff",
+ "summary": "The reader's password is wired from OpenBao via ExternalSecret into the setup Job by secretKeyRef, the Job name hashes its whole spec, and the README rotation path accounts for ESO's refresh and Argo CD's selfHeal:false. Mutations confirm tests/setup-job.sh catches pin-only naming, a plain value and a wrong key. No findings.",
+ "details": "code_review_r1.md",
+ "findings": []}
