@@ -571,6 +571,29 @@ cluster-wide role.
 > forgets the objects of a stage's pruned namespace rather than reaching into it (D66). The
 > exception is narrow: one dedicated identity, used only by that operator-started pipeline.
 
+**D67 — Every push to a deploy repo syncs its app and runs the Terraform hook.** Decided
+2026-10-03 (operator, slice 038 Ruling D1; ANS-179; rolled out estate-wide in the same slice,
+Ruling D2). Beside the PreSync RoleBinding and Job (D33, D30), the `homelab-shared` hook include
+renders a small ordinary ConfigMap — not a hook — carrying the synced commit, `hook.revision`,
+which the registry passes as `$ARGOCD_APP_REVISION` (D30; per source in a multi-source app, D56).
+Every commit therefore renders differently, the app goes OutOfSync, auto-sync (D5, D46) syncs it,
+and the PreSync hook runs `terraform apply` at that commit — doc and test commits included. A
+consumer takes this by moving its exact library pin (D17) and nothing else: no manual step, no
+gate, no new credential.
+
+Why: before it, a push touching only `terraform/` or the stage tfvars never reached
+`terraform apply` until some later push changed the render. Hooks are outside Argo's diff;
+`terraform/` and `config/{stage}/*.tfvars` sit outside `chart/` (D12, D14), where Helm's `.Files`
+cannot reach them; auto-sync fires only on OutOfSync — Argo CD v3.5.1 skips an app whose status
+is Synced — and no sync option forces a sync on an identical render; and nothing else starts
+one, since no deploy-repo pipeline calls Argo and Jenkins holds no Argo credential (D1).
+
+Turned down: a hash of `terraform/` in `config/*/values.yaml`, which needs the same chart object
+plus a manual step to refresh the hash and a gate to refuse a stale one, and puts a value that
+does not vary by stage into per-stage config (D12); and a hook owned by the registry instead of
+pinned per repo, so one change would reach every app — parked as ANS-199. The cost taken: a sync
+and an apply on every push, the apply mostly a no-op.
+
 ## Promotion and CI
 
 **Scope note (operator, gate-1 review).** Branch topology, promotion trigger, rollback ritual

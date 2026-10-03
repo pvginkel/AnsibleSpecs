@@ -153,6 +153,24 @@ commits included.
 
 The id is allocated at append time and given in the done-record.
 
+**Done (P1).** `argo-cd/decisions.md` carries **D67 — Every push to a deploy repo syncs its app
+and runs the Terraform hook**, last entry of "Terraform and the PreSync hook" (before "Promotion
+and CI"). No existing entry amended: none of D5, D14, D17, D30, D46, D56 states anything D67 makes
+untrue; D67 cross-references them instead.
+
+Later phases:
+- P3 — the template's header comment cites **D67** (argo-cd decisions.md); edited in place.
+
+Record:
+- D67 states the mechanism (non-hook ConfigMap carrying `hook.revision`, passed as
+  `$ARGOCD_APP_REVISION`, per source in a multi-source app per D56), the why (hooks outside the
+  diff; `terraform/` and `config/{stage}/*.tfvars` outside `chart/`, D12/D14; auto-sync only on
+  OutOfSync, Argo CD v3.5.1; no pipeline or credential can start a sync, D1), what was turned down
+  (terraform/ hash in per-stage values, D12; registry-owned hook, ANS-199) and the cost taken (a
+  sync and an apply per push, mostly no-op).
+- The ConfigMap's name is left to P3; D67 names no object.
+- Gate: AnsibleSpecs has no manifest or linter (plain Markdown, README); checked D67 is unique.
+
 ### P2 — ArgoCDDeploy's render gate refuses a widened role:readonly, in every policy key
 
 Target: ../ArgoCDDeploy
@@ -191,7 +209,8 @@ push.
   the AppProject restricts only cluster-scoped kinds (ArgoCDDeploy
   `chart/templates/appproject.yaml:33`). Not in argocd-hooks: that namespace holds the hook's
   run and credentials (D33).
-- The template's header comment says why the object exists, citing P1's decision.
+- The template's header comment says why the object exists, citing P1's decision — argo-cd
+  decisions.md **D67**.
 - **Published per the Charts README** (§ Publishing a version): a new version, its tarball
   packaged into the committed `dist/`; `tests/publish.sh` stays green. The consumer gate
   (`tests/render-consumer.sh`) asserts the ConfigMap is in the render, is not a hook, and
