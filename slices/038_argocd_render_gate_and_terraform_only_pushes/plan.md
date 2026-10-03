@@ -171,7 +171,7 @@ Record:
 - The ConfigMap's name is left to P3; D67 names no object.
 - Gate: AnsibleSpecs has no manifest or linter (plain Markdown, README); checked D67 is unique.
 
-### P2 — ArgoCDDeploy's render gate refuses a widened role:readonly, in every policy key
+### P2 — ArgoCDDeploy's render gate refuses a widened role:readonly, in every policy key ✅ DONE 2026-10-03
 
 Target: ../ArgoCDDeploy
 
