@@ -73,6 +73,83 @@ Argo CD, Prometheus, storage): quiet, but a new critical app is silent until som
 
 **Operator.** agree (2026-10-03, in chat)
 
+## D3 — Whether the LoadBalancer alert skips KubeCoder environments' Services
+
+**Context.** The plan is written: seven build phases across the Prometheus deploy, Ansible,
+DockerImages and the Elasticsearch deploy, plus test and doc. When you agreed the pod alerts
+(every namespace, warning, fifteen minutes), the same ruling made the alert on a LoadBalancer
+Service that MetalLB does not announce critical and unscoped, on the grounds that such Services
+are cluster-wide by nature. The plan's alert phase defers to that ruling and builds whatever you
+rule here.
+
+**The ask.** The outage card's first missing signal is the DHCP failure itself: a LoadBalancer
+Service with no ready endpoints, which MetalLB therefore never announces. The alert has to page
+when a Service that serves the house has lost its address.
+
+**Background.** Queried live on the production cluster on 2026-10-03: 42 of its 65 LoadBalancer
+Services were not announced by MetalLB, and every one of the 42 is a KubeCoder environment — a
+stopped environment keeps its LoadBalancer Service with no pod behind it, so unannounced is its
+normal state. Every other LoadBalancer Service, DHCP and DNS among them, was announced. Built as
+agreed, the alert sends 42 critical pages the moment the Prometheus deploy is pushed; they never
+resolve, and every environment stop adds one more.
+
+**Why yours.** It narrows an alert you agreed as unscoped.
+
+**Recommendation.** Skip KubeCoder environments' Services; every other LoadBalancer Service stays
+in scope and critical, so the alert means what you wanted it to mean: something that serves the
+house has lost its address. The trade-off: a running environment whose pod breaks gets no
+LoadBalancer alert; the pod alert you agreed, a warning, still catches its crash loop or image
+pull. Whether the rule recognises an environment by its namespace or by the KubeCoder label is
+settled in the plan.
+
+**The other way.** An allow-list of infrastructure Services (DHCP, DNS, ingress and so on): the
+quietest, but a new LoadBalancer Service is silent until someone adds it — the trade-off you
+rejected for the pod alert.
+
+**If this is wrong.** A missed address loss on a running environment (low), or noise; one matcher
+to change.
+
+**Operator.** "Agreed" (2026-10-03, in chat)
+
+## D4 — Whether the test phase may read the Elasticsearch reader's password from OpenBao to confirm the runbook's Kibana route
+
+**Context.** The plan is written; its runbook phase (the Argo CD runbook's Kibana route to a
+replaced hook's log, confirmed) is written for this recommendation, and the test phase pushes the
+Ansible repo last. Already settled, and you saw it: the read-only Elasticsearch user is created by
+the setup Job from a password you write to OpenBao; the Kibana check uses a current Argo CD hook
+pod's log; and once a query with the new credential returns that pod's lines, the runbook drops
+"unconfirmed". The standing rule is that an agent reads no OpenBao secret value without your
+explicit permission, given per path.
+
+**The ask.** The log-access card asks that, with the reader in place, the Kibana route the Argo CD
+runbook gives for a replaced hook's log be checked, so it becomes a real answer instead of an
+unconfirmed one.
+
+**Background.** Two facts of the run stand in the way. The reader exists only after the test
+phase's pushes — the image build, CI writing the pin into the Elasticsearch deploy, then Argo CD
+syncing the Job — so no build phase can run the confirming query. And the query needs the
+reader's password, which lives only in OpenBao.
+
+**Why yours.** It is a read of an OpenBao secret value by an agent, which only your per-path
+permission allows.
+
+**Recommendation.** Allow the test phase to read the reader's password, once, at the one path the
+plan names — the Elasticsearch reader's leaf under the production ESO tree,
+`kv/eso/prd/elasticsearch/prd/filebeat-reader`, property `password` — to run the confirming query
+against a current hook pod's log. The runbook edit is written as confirmed, but the Ansible repo
+is pushed only after the query has returned lines; a query that returns nothing is a blocking
+finding and comes back as work. The trade-off: one agent sees one credential — a read-only key to
+seven days of logs, the same one the KubeCoder card will hand to every environment anyway.
+
+**The other way.** You run the query after the run, and the runbook edit leaves the slice as a
+close-out action: no credential read by an agent, but the runbook keeps saying "unconfirmed" until
+you do it, and the slice delivers the log-access requirement only in part.
+
+**If this is wrong.** A credential read you did not want (low: read-only, logs only), or a runbook
+line that stays unconfirmed.
+
+**Operator.** "Agreed" (2026-10-03, in chat)
+
 ## Open facts — questions only you can answer
 
 **F1.** Do you already have a healthchecks.io account, and should its notification go to the same

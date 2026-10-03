@@ -5,3 +5,25 @@
      `close_out.py show <id>` prints an entry in full. -->
 
 Run: <not yet stamped>
+
+## Comes to you
+
+### A1 — Before /dev:run-slice: create the healthchecks.io check (period 5 minutes, grace 10 minutes, Telegram integration) and write its ping URL to kv/eso/prd/prometheus/prd/healthchecks
+
+**Proposal:** do it — one check in healthchecks.io and one bao kv put; the run's push of
+PrometheusDeploy depends on it.
+
+**Consequence:** Without the leaf, Alertmanager's restarted pod waits on its missing Secret mount once the test phase pushes P4, and no alert reaches Telegram until the leaf exists.
+
+**Route:** to you — an action
+**Disposition:**
+
+### A2 — Before /dev:run-slice: generate the filebeat reader's password and write it to kv/eso/prd/elasticsearch/prd/filebeat-reader
+
+**Proposal:** do it — one bao kv put; the run's ElasticsearchDeploy push and the runbook
+confirmation depend on it.
+
+**Consequence:** Without the leaf, the setup Job's pod waits on its missing Secret after the test phase's push, the reader is never created, and the runbook confirmation (P7, V10) cannot be made.
+
+**Route:** to you — an action
+**Disposition:**

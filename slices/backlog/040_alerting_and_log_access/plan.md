@@ -35,8 +35,18 @@
   repeat interval, and `bao kv put` the ping URL at the path the plan names.
 - Ruling D2 (2026-10-03, "agree"): **CrashLoopBackOff/ImagePullBackOff alerts cover every
   namespace on the production cluster, severity warning, after the condition holds 15 minutes,
-  one alert per pod.** Node NotReady and a LoadBalancer Service with no ready endpoints / not
-  announced by MetalLB are critical, unscoped.
+  one alert per pod.** Node NotReady is critical, unscoped.
+- Ruling D3 (2026-10-03, "Agreed"): **a LoadBalancer Service with no ready endpoints / not
+  announced by MetalLB is critical, and skips KubeCoder environments' Services** (stopped
+  environments keep an unannounced LoadBalancer Service by design — 42 of them on prd on
+  2026-10-03); every other LoadBalancer Service stays in scope. Namespace or label match is the
+  plan's call.
+- Ruling D4 (2026-10-03, "Agreed"): **the test phase may read
+  `kv/eso/prd/elasticsearch/prd/filebeat-reader`, property `password`, once, to run the
+  query confirming the runbook's Kibana route** against a current Argo CD hook pod's log. The
+  runbook edit is written as confirmed; the Ansible repo is pushed only after that query returns
+  the pod's lines; a failed query is a blocking finding. This is the operator's per-path
+  permission for that one OpenBao value — no other path.
 - Settled (refinement, operator saw it): the **DHCP probe runs on srviac** (outside the cluster,
   static address 10.1.0.45, does not depend on the DHCP it tests) as a systemd timer writing its
   result to srviac's node-exporter (textfile collector), which in-cluster Prometheus already
