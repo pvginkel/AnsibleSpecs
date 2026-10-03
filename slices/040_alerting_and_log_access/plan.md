@@ -544,7 +544,7 @@ Later phases:
   kubelet retries, and it is not a finding. Check afterwards that ExternalSecret
   `elasticsearch-reader` reads Ready and the Job named after the pin's render is Complete.
 
-### P7 — Ansible runbook: the route to a replaced hook's log, through Kibana and the API, confirmed
+### P7 — Ansible runbook: the route to a replaced hook's log, through Kibana and the API, confirmed ✅ DONE 2026-10-03
 
 Target: root
 
