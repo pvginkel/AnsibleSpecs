@@ -1,0 +1,5 @@
+{"outcome": "signoff",
+ "summary": "aac-tools ships Architecture a3f595e's arch-validate byte for byte with the pinned MD5, and gen-architecture's single write site quotes YAML-1.2 number-like strings with P2's resolvers, everything else unchanged. One advisory coverage gap: the write-site wiring is not pinned by any test.",
+ "details": "code_review_r1.md",
+ "findings": [{"id": "F1", "severity": "Minor", "impact": "advisory", "category": "functional", "anchor": "coverage-gap",
+   "summary": "No test pins that main() writes the artifact through dump_yaml; reverting the write site to safe_dump leaves the suite green"}]}
