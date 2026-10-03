@@ -1,0 +1,186 @@
+/work/scratch/ElasticsearchDeploy — P6: git diff 08b18ef2a4a2..9b336658a763
+
+.kubecoder/project.yaml                      |  1 +
+ README.md                                    | 52 ++++++++++++++++++++++++++++++++++++++++++++++++
+ chart/templates/elasticsearch-setup-job.yaml | 46 +++++++++++++++++++++++-------------------
+ config/prd/values.yaml                       |  6 ++++++
+ tests/setup-job.sh                           | 24 ++++++++++++++++++++++
+ 5 files changed, 109 insertions(+), 20 deletions(-)
+
+diff --git a/.kubecoder/project.yaml b/.kubecoder/project.yaml
+index 1c5a5c1..36b8edf 100644
+--- a/.kubecoder/project.yaml
++++ b/.kubecoder/project.yaml
+@@ -18,6 +18,7 @@ projects:
+       - >-
+         cexec iac helm template elasticsearch-prd chart --namespace elasticsearch-prd --values config/prd/values.yaml
+         --set hook.repo=https://github.com/pvginkel/ElasticsearchDeploy.git,hook.revision=0123456789abcdef0123456789abcdef01234567,hook.stage=prd,hook.namespace=elasticsearch-prd
++      - cexec iac tests/setup-job.sh
+       - cexec iac tf-check
+       - cexec aac-tools gen-architecture --stage prd --producer elasticsearch-deploy
+       - cexec aac-tools arch-validate docs/architecture/elasticsearch-deploy.yaml
+diff --git a/README.md b/README.md
+index 22d07d9..83228f3 100644
+--- a/README.md
++++ b/README.md
+@@ -10,6 +10,58 @@ elasticsearch's deploy repository. Argo CD syncs the `elasticsearch-prd` Applica
+   state moved across with its addresses. The namespace is the chart's (`templates/namespace.yaml`),
+   never Terraform's. `terraform/webhook.tf` owns this repository's GitHub webhook to the relay.
+ - **Architecture**: `Jenkinsfile.architecture` publishes producer `elasticsearch-deploy` (D50).
++- **Setup Job**: `elasticsearch-setup-<hash>` (`chart/templates/elasticsearch-setup-job.yaml`)
++  sets the built-in users' passwords and creates the users below. Its name hashes its whole
++  spec, so any change to the spec (the image pin included) is a new Job, which runs once;
++  Argo CD prunes the previous one.
++
++## The read-only user `reader`
++
++The setup Job creates Elasticsearch user `reader` with the built-in `viewer` role: it reads every
++index, through the API and in Kibana (`http://kibana.home`), and writes or manages nothing. Its
++password lives in OpenBao at `kv/eso/prd/elasticsearch/prd/filebeat-reader`, property
++`password`; ExternalSecret `elasticsearch-reader` materialises it as Secret
++`elasticsearch-reader`, which the Job reads as `READER_PASSWORD`. Nothing in this repository
++holds the value.
++
++Rotate the password as follows, with `bao` logged in and `kubectl` holding write access to the
++prd cluster. Nothing re-applies a changed password on its own: ESO refreshes
++the Secret only hourly, and Argo CD does not recreate a deleted Job by itself (the app
++auto-syncs with `selfHeal: false`, and auto-sync does not re-sync a revision it has already
++synced).
++
++1. Write the new value from stdin, so it never lands in a shell history:
++
++   ```sh
++   printf %s "$VALUE" | bao kv put -mount=kv eso/prd/elasticsearch/prd/filebeat-reader password=-
++   ```
++
++2. Make ESO refresh the Secret now, and wait until its last sync is later than step 1. A Job
++   that runs before then applies the old password again.
++
++   ```sh
++   kubectl -n elasticsearch-prd annotate externalsecret elasticsearch-reader force-sync=$(date +%s) --overwrite
++   kubectl -n elasticsearch-prd get externalsecret elasticsearch-reader \
++     -o jsonpath='{.status.refreshTime} {.status.conditions[?(@.type=="Ready")].status}{"\n"}'
++   ```
++
++3. Delete the completed setup Job:
++
++   ```sh
++   kubectl -n elasticsearch-prd get jobs -o name | grep '/elasticsearch-setup-' \
++     | xargs kubectl -n elasticsearch-prd delete
++   ```
++
++4. Start a sync of `elasticsearch-prd`: the Argo CD UI's **Sync** on the app. It recreates the
++   Job under the same name, and the Job sets the new password.
++5. Check that the Job completed (`kubectl -n elasticsearch-prd get jobs`) and that the new
++   password authenticates:
++
++   ```sh
++   curl -s -o /dev/null -w '%{http_code}\n' -u "reader:$VALUE" http://elasticsearch.home/_security/_authenticate
++   ```
++
++   `200` means Elasticsearch is on the new password.
+ 
+ ## Copied from HelmCharts
+ 
+diff --git a/chart/templates/elasticsearch-setup-job.yaml b/chart/templates/elasticsearch-setup-job.yaml
+index 5aa40d1..8f0e254 100644
+--- a/chart/templates/elasticsearch-setup-job.yaml
++++ b/chart/templates/elasticsearch-setup-job.yaml
+@@ -1,24 +1,30 @@
++{{- define "elasticsearch-setup.spec" -}}
++template:
++  spec:
++    containers:
++      - name: elasticsearch-setup
++        image: registry:5000/elasticsearch-setup{{ .Values.images.elasticsearchSetup }}
++        env:
++          - name: ELASTICSEARCH_HOST
++            value: http://elasticsearch.elasticsearch-prd.svc.cluster.local:9200
++          - name: ELASTICSEARCH_PASSWORD
++            value: {{ .Values.elasticsearch.password | quote }}
++          - name: KIBANA_PASSWORD
++            value: {{ .Values.elasticsearch.password | quote }}
++          - name: LOGSTASH_PASSWORD
++            value: {{ .Values.elasticsearch.password | quote }}
++          - name: READER_PASSWORD
++            valueFrom:
++              secretKeyRef:
++                name: {{ .Values.externalSecrets.secrets.reader.targetName }}
++                key: password
++    restartPolicy: OnFailure
++{{- end -}}
+ apiVersion: batch/v1
+ kind: Job
+ metadata:
+-  # Named after its image pin (argo-cd bulk migration): stable between syncs, new, and
+-  # so re-run, when the image changes.
+-  name: elasticsearch-setup-{{ .Values.images.elasticsearchSetup | sha256sum | trunc 5 }}
+-  annotations:
+-    helm.sh/resource-policy: replace
++  # A Job's pod template is immutable, so the name hashes the whole spec: any change
++  # to it is a new Job, which runs; an unchanged spec leaves the completed Job in place.
++  name: elasticsearch-setup-{{ include "elasticsearch-setup.spec" . | sha256sum | trunc 5 }}
+ spec:
+-  template:
+-    spec:
+-      containers:
+-        - name: elasticsearch-setup
+-          image: registry:5000/elasticsearch-setup{{ .Values.images.elasticsearchSetup }}
+-          env:
+-            - name: ELASTICSEARCH_HOST
+-              value: http://elasticsearch.elasticsearch-prd.svc.cluster.local:9200
+-            - name: ELASTICSEARCH_PASSWORD
+-              value: {{ .Values.elasticsearch.password | quote }}
+-            - name: KIBANA_PASSWORD
+-              value: {{ .Values.elasticsearch.password | quote }}
+-            - name: LOGSTASH_PASSWORD
+-              value: {{ .Values.elasticsearch.password | quote }}
+-      restartPolicy: OnFailure
++  {{- include "elasticsearch-setup.spec" . | nindent 2 }}
+diff --git a/config/prd/values.yaml b/config/prd/values.yaml
+index af6601f..89a1f7e 100644
+--- a/config/prd/values.yaml
++++ b/config/prd/values.yaml
+@@ -11,6 +11,12 @@ externalSecrets:
+         property: file
+         secretKey: file
+       targetName: elasticsearch-kibana-config
++    reader:
++      data:
++      - path: eso/prd/elasticsearch/prd/filebeat-reader
++        property: password
++        secretKey: password
++      targetName: elasticsearch-reader
+ global:
+   environment: prd
+ images:
+diff --git a/tests/setup-job.sh b/tests/setup-job.sh
+new file mode 100755
+index 0000000..e579fbb
+--- /dev/null
++++ b/tests/setup-job.sh
+@@ -0,0 +1,24 @@
++#!/bin/sh
++# The setup Job as prd renders it: READER_PASSWORD comes from the ExternalSecret's Secret, never a
++# value; the Job's name hashes its whole spec, so a spec change under the same image pin (the
++# reader's env here) and a pin change each yield a new name, and an unchanged spec keeps it.
++set -eu
++cd "$(dirname "$0")/.."
++render() {
++  helm template elasticsearch-prd chart --namespace elasticsearch-prd --values config/prd/values.yaml \
++    --set hook.repo=x,hook.revision=0123456789abcdef0123456789abcdef01234567,hook.stage=prd,hook.namespace=elasticsearch-prd \
++    --show-only templates/elasticsearch-setup-job.yaml "$@"
++}
++name() { render "$@" | yq -er .metadata.name; }
++
++secret=$(yq -er .externalSecrets.secrets.reader.targetName config/prd/values.yaml)
++render | yq -e '.spec.template.spec.containers[0].env[] | select(.name == "READER_PASSWORD")
++  | select(.valueFrom.secretKeyRef.name == "'"$secret"'" and .valueFrom.secretKeyRef.key == "password" and (has("value") | not))' >/dev/null
++
++base=$(name)
++[ "$base" = "$(name)" ] || { echo "setup Job name is not stable for an unchanged spec" >&2; exit 1; }
++[ "$base" != "$(name --set externalSecrets.secrets.reader.targetName=other)" ] \
++  || { echo "setup Job name did not change with its env" >&2; exit 1; }
++[ "$base" != "$(name --set images.elasticsearchSetup=:0)" ] \
++  || { echo "setup Job name did not change with its image pin" >&2; exit 1; }
++echo "setup Job: $base"

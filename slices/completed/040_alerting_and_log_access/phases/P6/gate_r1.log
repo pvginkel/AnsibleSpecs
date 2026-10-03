@@ -1,0 +1,6 @@
+root: cexec aac-tools chart-deps    [  OK  ]
+root: cexec iac helm template elasticsearch-prd chart --namespace elasticsearch-prd --values config/prd/values.yaml --set hook.repo=https://github.com/pvginkel/ElasticsearchDeploy.git,hook.revision=0123456789abcdef0123456789abcdef01234567,hook.stage=prd,hook.namespace=elasticsearch-prd    [  OK  ]
+root: cexec iac tests/setup-job.sh    [  OK  ]
+root: cexec iac tf-check    [  OK  ]
+root: cexec aac-tools gen-architecture --stage prd --producer elasticsearch-deploy    [  OK  ]
+root: cexec aac-tools arch-validate docs/architecture/elasticsearch-deploy.yaml    [  OK  ]

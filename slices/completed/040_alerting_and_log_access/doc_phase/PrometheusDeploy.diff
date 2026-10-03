@@ -1,0 +1,1267 @@
+/work/scratch/PrometheusDeploy — P2: git diff 915ceeb35b72..6199854beb76
+
+config/prd/values.yaml              | 122 ++++++++++++++++++++++++++++++++++++++++++++++++
+ tests/alert-rules.sh                |  11 ++++-
+ tests/alert-rules/loadbalancers.yml | 140 ++++++++++++++++++++++++++++++++++++++++++++++++++++++++
+ tests/alert-rules/nodes.yml         |  36 +++++++++++++++
+ tests/alert-rules/pods.yml          | 130 ++++++++++++++++++++++++++++++++++++++++++++++++++++
+ 5 files changed, 437 insertions(+), 2 deletions(-)
+
+diff --git a/config/prd/values.yaml b/config/prd/values.yaml
+index 70547d9..2457e21 100644
+--- a/config/prd/values.yaml
++++ b/config/prd/values.yaml
+@@ -370,6 +370,124 @@ serverFiles:
+                 prometheus.io/scrape annotation; check the target in Prometheus)
+                 or the controller lists no Applications.
+ 
++      # kube-state-metrics emits a container's waiting series only while it
++      # waits, with its current reason. Between back-offs a crash-looping
++      # container runs and the series is gone, and a failing pull flips between
++      # ErrImagePull and ImagePullBackOff, each change a new series. So the rule
++      # takes the three reasons, of containers and init containers (a native
++      # sidecar is one), over a 5 m look-back, by pod. 5 m bridges the running
++      # spells: the longest in 42 days of history was 4 m. A 10 m look-back
++      # would have fired once in those days, on a validation pod whose loop had
++      # cleared after 8 m. The look-back also means a loop whose last wait
++      # falls in the 5 m before its 15th minute still fires, and an alert
++      # resolves 5 m after the pod's last wait, its deletion included.
++      # tests/alert-rules/pods.yml walks these edges on synthetic series.
++      - name: pods
++        rules:
++          - alert: PodStuckInBackOff
++            expr: |
++              max by (namespace, pod) (
++                  max_over_time(kube_pod_container_status_waiting_reason{reason=~"CrashLoopBackOff|ImagePullBackOff|ErrImagePull"}[5m])
++                or
++                  max_over_time(kube_pod_init_container_status_waiting_reason{reason=~"CrashLoopBackOff|ImagePullBackOff|ErrImagePull"}[5m])
++              )
++            for: 15m
++            labels:
++              severity: warning
++            annotations:
++              summary: '{{ $labels.namespace }}/{{ $labels.pod }} has been in CrashLoopBackOff or ImagePullBackOff for 15m'
++              description: >-
++                A container of the pod keeps crashing or cannot pull its image.
++                kubectl -n {{ $labels.namespace }} describe pod {{ $labels.pod }}
++                names the container and its reason; kubectl logs --previous
++                gives a crashed container's last output. This alert resolves
++                5 m after no container of the pod waits on either reason.
++
++      # kube-state-metrics' Ready condition per node; a node whose kubelet
++      # stops posting status reads Unknown, so not true. In 42 days of
++      # history every NotReady spell but the 2026-09-25 outage's lasted at
++      # most 1 m, a reboot; 10 m lets a slow one pass.
++      # tests/alert-rules/nodes.yml walks the window's edges.
++      - name: nodes
++        rules:
++          - alert: NodeNotReady
++            expr: |
++              max by (node) (kube_node_status_condition{condition="Ready", status="true"}) == 0
++            for: 10m
++            labels:
++              severity: critical
++            annotations:
++              summary: '{{ $labels.node }} has been NotReady for 10m'
++              description: >-
++                The node's kubelet has not reported Ready: the node is down, off
++                the network, or its kubelet is failing. kubectl describe node
++                {{ $labels.node }} gives the Ready condition's reason and when it
++                last changed. Its pods are not running until it is back.
++
++      # A MetalLB speaker exports metallb_speaker_announced, as
++      # service="<namespace>/<name>", for each Service it announces, the fact
++      # a ServiceL2Status records. MetalLB withdraws a Service with no ready
++      # endpoints, so one signal covers an unready backend and a Service
++      # MetalLB does not serve; the announcement moves between speakers, so it
++      # is taken by Service.
++      #
++      # KubeCoder environments are out of scope: a stopped one keeps its
++      # LoadBalancer Service unannounced by design. They are recognised by the
++      # app.kubernetes.io/managed-by=kubecoder label KubeCoder puts on them,
++      # which kube-state-metrics exports through the allow-list below, not by
++      # namespace: KubeCoder's own Services share kubecoder-prd.
++      #
++      # A speaker whose scrape fails reads as announcing nothing. That is what
++      # a speaker on a node that is down or off the network does, as srvk8s4's
++      # did for the whole 2026-09-25 outage, so it does not silence the rule.
++      # A speaker that is up and announces nothing exports no series, so only
++      # no speaker scraped up reads as a gap: the rule is silent and
++      # MetalLBAnnouncementsBlind fires.
++      #
++      # From 2026-09-16 to 2026-10-03 a Service's announcement dropped for at
++      # most 6 m around node reboots and rollouts; the outage's dhcp, for
++      # 166 m. 10 m passes the former.
++      # tests/alert-rules/loadbalancers.yml walks these edges on synthetic series.
++      - name: loadbalancers
++        rules:
++          - alert: LoadBalancerNotAnnounced
++            expr: |
++              max by (namespace, service) (kube_service_spec_type{type="LoadBalancer"})
++              unless on (namespace, service)
++                kube_service_labels{label_app_kubernetes_io_managed_by="kubecoder"}
++              unless on (namespace, service)
++                label_replace(
++                  label_replace(max by (service) (metallb_speaker_announced) > 0, "namespace", "$1", "service", "([^/]+)/.*"),
++                  "service", "$1", "service", "[^/]+/(.*)"
++                )
++              and on () (up{job="kubernetes-pods", namespace="metallb-system", component="speaker"} == 1)
++            for: 10m
++            labels:
++              severity: critical
++            annotations:
++              summary: 'MetalLB does not announce LoadBalancer Service {{ $labels.namespace }}/{{ $labels.service }}'
++              description: >-
++                No MetalLB speaker has announced the Service's address for
++                10 m, so nothing outside the cluster reaches it. MetalLB
++                withdraws a Service with no ready endpoints: check that its
++                pods are Ready (kubectl -n {{ $labels.namespace }} get
++                endpointslices -l kubernetes.io/service-name={{ $labels.service }}).
++                If they are, kubectl -n {{ $labels.namespace }} describe svc
++                {{ $labels.service }} shows whether it has an address, and the
++                speakers' logs in metallb-system say why they do not announce it.
++          - alert: MetalLBAnnouncementsBlind
++            expr: |
++              absent(up{job="kubernetes-pods", namespace="metallb-system", component="speaker"} == 1)
++            for: 10m
++            labels:
++              severity: warning
++            annotations:
++              summary: 'LoadBalancer announcements are unwatched: no MetalLB speaker scraped for 10m'
++              description: >-
++                Prometheus has scraped no MetalLB speaker in metallb-system on
++                :7472 for 10 m, so LoadBalancerNotAnnounced cannot fire. Check
++                the speaker targets in Prometheus.
++
+ alertmanager:
+   # See https://github.com/prometheus-community/helm-charts/blob/main/charts/alertmanager/values.yaml
+   service:
+@@ -506,6 +624,10 @@ prometheus-node-exporter:
+       memory: 28Mi
+ 
+ kube-state-metrics:
++  # The loadbalancers rule group reads it as kube_service_labels'
++  # label_app_kubernetes_io_managed_by.
++  metricLabelsAllowlist:
++    - services=[app.kubernetes.io/managed-by]
+   resources:
+     requests:
+       memory: 48Mi
+diff --git a/tests/alert-rules.sh b/tests/alert-rules.sh
+index 2a42b79..e50debc 100755
+--- a/tests/alert-rules.sh
++++ b/tests/alert-rules.sh
+@@ -1,8 +1,10 @@
+ #!/bin/sh
+ # prd's alerting rules as the upstream chart renders them into the server ConfigMap, at the pin
+ # architecture.yaml's `upstream` gives: `promtool check rules`, then the unit tests under
+-# tests/alert-rules/. promtool is the iac toolchain's, pinned to prd's Prometheus. The tests run
+-# from copies in ./tests beside the render, which their `rule_files` names.
++# tests/alert-rules/. The loadbalancers group reads a Service label that kube-state-metrics exports
++# only through its allow-list flag, so the render must carry it. promtool is the iac toolchain's,
++# pinned to prd's Prometheus. The tests run from copies in ./tests beside the render, which their
++# `rule_files` names.
+ set -eu
+ cd "$(dirname "$0")/.."
+ work=$(mktemp -d)
+@@ -11,6 +13,11 @@ helm template prometheus-prd "$(yq -er .upstream.chart architecture.yaml)" \
+   --repo "$(yq -er .upstream.repo architecture.yaml)" --version "$(yq -er .upstream.version architecture.yaml)" \
+   --namespace prometheus-prd --values config/prd/values.yaml --show-only templates/cm.yaml >"$work/cm.yaml"
+ yq -er '.data["alerting_rules.yml"]' "$work/cm.yaml" >"$work/alerting_rules.yml"
++helm template prometheus-prd "$(yq -er .upstream.chart architecture.yaml)" \
++  --repo "$(yq -er .upstream.repo architecture.yaml)" --version "$(yq -er .upstream.version architecture.yaml)" \
++  --namespace prometheus-prd --values config/prd/values.yaml \
++  --show-only charts/kube-state-metrics/templates/deployment.yaml \
++  | yq -e '.spec.template.spec.containers[0].args[] | select(. == "--metric-labels-allowlist=services=[app.kubernetes.io/managed-by]")' >/dev/null
+ promtool check rules "$work/alerting_rules.yml"
+ mkdir "$work/tests"
+ cp tests/alert-rules/*.yml "$work/tests/"
+diff --git a/tests/alert-rules/loadbalancers.yml b/tests/alert-rules/loadbalancers.yml
+new file mode 100644
+index 0000000..9b6a267
+--- /dev/null
++++ b/tests/alert-rules/loadbalancers.yml
+@@ -0,0 +1,140 @@
++# The loadbalancers group, over synthetic kube-state-metrics and MetalLB speaker series. A speaker
++# exports one series per Service it announces; when the announcement moves or is withdrawn, the
++# old series ends `stale`, and so does every series of a speaker whose scrape fails, while its `up`
++# reads 0.
++rule_files:
++  - ../alerting_rules.yml
++evaluation_interval: 1m
++
++tests:
++  - name: a withdrawn Service and an unlabelled one in kubecoder-prd fire after 10m; a KubeCoder environment, a ClusterIP and a 6m move stay quiet; a failed speaker scrape does not silence them; no speaker scraped up silences them and fires the blind warning after 10m
++    interval: 1m
++    input_series:
++      # srvk8s4's scrape fails from 5 m, as in the outage; srvk8s2's target is gone from 40 m and
++      # srvk8s3's scrape fails from 40 m.
++      - series: up{job="kubernetes-pods", namespace="metallb-system", node="srvk8s4", instance="10.1.3.5:7472", app="metallb", component="speaker"}
++        values: 1x4 0x55
++      - series: up{job="kubernetes-pods", namespace="metallb-system", node="srvk8s2", instance="10.1.0.28:7472", app="metallb", component="speaker"}
++        values: 1x39 stale
++      - series: up{job="kubernetes-pods", namespace="metallb-system", node="srvk8s3", instance="10.1.0.29:7472", app="metallb", component="speaker"}
++        values: 1x39 0x20
++      # The controller is up throughout and is not a speaker.
++      - series: up{job="kubernetes-pods", namespace="metallb-system", node="srvk8s1", instance="172.16.128.205:7472", app="metallb", component="controller"}
++        values: 1x60
++      - series: kube_service_spec_type{job="kubernetes-service-endpoints", namespace="dnsmasq-prd", service="dhcp", type="LoadBalancer"}
++        values: 1x60
++      - series: kube_service_labels{job="kubernetes-service-endpoints", namespace="dnsmasq-prd", service="dhcp"}
++        values: 1x60
++      - series: kube_service_spec_type{job="kubernetes-service-endpoints", namespace="dnsmasq-prd", service="dhcp-app", type="ClusterIP"}
++        values: 1x60
++      - series: kube_service_labels{job="kubernetes-service-endpoints", namespace="dnsmasq-prd", service="dhcp-app"}
++        values: 1x60
++      - series: kube_service_spec_type{job="kubernetes-service-endpoints", namespace="guacamole-prd", service="guacamole", type="LoadBalancer"}
++        values: 1x60
++      - series: kube_service_labels{job="kubernetes-service-endpoints", namespace="guacamole-prd", service="guacamole"}
++        values: 1x60
++      - series: kube_service_spec_type{job="kubernetes-service-endpoints", namespace="registry-prd", service="registry", type="LoadBalancer"}
++        values: 1x60
++      - series: kube_service_labels{job="kubernetes-service-endpoints", namespace="registry-prd", service="registry"}
++        values: 1x60
++      # A stopped KubeCoder environment.
++      - series: kube_service_spec_type{job="kubernetes-service-endpoints", namespace="kubecoder-prd", service="pvginkel-ansible-505ac9", type="LoadBalancer"}
++        values: 1x60
++      - series: kube_service_labels{job="kubernetes-service-endpoints", namespace="kubecoder-prd", service="pvginkel-ansible-505ac9", label_app_kubernetes_io_managed_by="kubecoder"}
++        values: 1x60
++      # A LoadBalancer of KubeCoder's own deploy.
++      - series: kube_service_spec_type{job="kubernetes-service-endpoints", namespace="kubecoder-prd", service="kubecoder-ssh", type="LoadBalancer"}
++        values: 1x60
++      - series: kube_service_labels{job="kubernetes-service-endpoints", namespace="kubecoder-prd", service="kubecoder-ssh", label_app_kubernetes_io_managed_by="Helm"}
++        values: 1x60
++      # dhcp: srvk8s4's speaker announces it until its scrape fails. Every speaker series ends at
++      # 40 m.
++      - series: metallb_speaker_announced{job="kubernetes-pods", namespace="metallb-system", node="srvk8s4", instance="10.1.3.5:7472", ip="10.2.1.10", protocol="layer2", service="dnsmasq-prd/dhcp"}
++        values: 1x4 stale
++      # guacamole: srvk8s2's speaker announces it until 9 m; srvk8s3's takes over at 16 m.
++      - series: metallb_speaker_announced{job="kubernetes-pods", namespace="metallb-system", node="srvk8s2", instance="10.1.0.28:7472", ip="10.2.1.14", protocol="layer2", service="guacamole-prd/guacamole"}
++        values: 1x9 stale
++      - series: metallb_speaker_announced{job="kubernetes-pods", namespace="metallb-system", node="srvk8s3", instance="10.1.0.29:7472", ip="10.2.1.14", protocol="layer2", service="guacamole-prd/guacamole"}
++        values: _x16 1x23 stale
++      - series: metallb_speaker_announced{job="kubernetes-pods", namespace="metallb-system", node="srvk8s3", instance="10.1.0.29:7472", ip="10.2.1.9", protocol="layer2", service="registry-prd/registry"}
++        values: 1x39 stale
++    alert_rule_test:
++      - alertname: LoadBalancerNotAnnounced
++        eval_time: 9m
++      - alertname: LoadBalancerNotAnnounced
++        eval_time: 10m
++        exp_alerts:
++          - &ssh_unannounced
++            exp_labels: {namespace: kubecoder-prd, service: kubecoder-ssh, severity: critical}
++            exp_annotations:
++              summary: MetalLB does not announce LoadBalancer Service kubecoder-prd/kubecoder-ssh
++              description: >-
++                No MetalLB speaker has announced the Service's address for 10 m, so nothing
++                outside the cluster reaches it. MetalLB withdraws a Service with no ready
++                endpoints: check that its pods are Ready (kubectl -n kubecoder-prd get
++                endpointslices -l kubernetes.io/service-name=kubecoder-ssh). If they are, kubectl
++                -n kubecoder-prd describe svc kubecoder-ssh shows whether it has an address, and
++                the speakers' logs in metallb-system say why they do not announce it.
++      - alertname: LoadBalancerNotAnnounced
++        eval_time: 14m
++        exp_alerts: [*ssh_unannounced]
++      - alertname: LoadBalancerNotAnnounced
++        eval_time: 15m
++        exp_alerts:
++          - *ssh_unannounced
++          - &dhcp_unannounced
++            exp_labels: {namespace: dnsmasq-prd, service: dhcp, severity: critical}
++            exp_annotations:
++              summary: MetalLB does not announce LoadBalancer Service dnsmasq-prd/dhcp
++              description: >-
++                No MetalLB speaker has announced the Service's address for 10 m, so nothing
++                outside the cluster reaches it. MetalLB withdraws a Service with no ready
++                endpoints: check that its pods are Ready (kubectl -n dnsmasq-prd get
++                endpointslices -l kubernetes.io/service-name=dhcp). If they are, kubectl -n
++                dnsmasq-prd describe svc dhcp shows whether it has an address, and the speakers'
++                logs in metallb-system say why they do not announce it.
++      - alertname: LoadBalancerNotAnnounced
++        eval_time: 39m
++        exp_alerts:
++          - *ssh_unannounced
++          - *dhcp_unannounced
++      - {alertname: LoadBalancerNotAnnounced, eval_time: 40m}
++      - {alertname: LoadBalancerNotAnnounced, eval_time: 60m}
++      - {alertname: MetalLBAnnouncementsBlind, eval_time: 39m}
++      - {alertname: MetalLBAnnouncementsBlind, eval_time: 49m}
++      - alertname: MetalLBAnnouncementsBlind
++        eval_time: 50m
++        exp_alerts:
++          - exp_labels: {severity: warning}
++            exp_annotations:
++              summary: 'LoadBalancer announcements are unwatched: no MetalLB speaker scraped for 10m'
++              description: >-
++                Prometheus has scraped no MetalLB speaker in metallb-system on :7472 for 10 m, so
++                LoadBalancerNotAnnounced cannot fire. Check the speaker targets in Prometheus.
++
++  - name: with a speaker scraped and up, MetalLB announcing nothing fires every Service outside KubeCoder's environments after 10m and leaves the blind warning quiet
++    interval: 1m
++    input_series:
++      - series: up{job="kubernetes-pods", namespace="metallb-system", node="srvk8s3", instance="10.1.0.29:7472", app="metallb", component="speaker"}
++        values: 1x60
++      - series: kube_service_spec_type{job="kubernetes-service-endpoints", namespace="dnsmasq-prd", service="dhcp", type="LoadBalancer"}
++        values: 1x60
++      - series: kube_service_labels{job="kubernetes-service-endpoints", namespace="dnsmasq-prd", service="dhcp"}
++        values: 1x60
++      - series: kube_service_spec_type{job="kubernetes-service-endpoints", namespace="kubecoder-prd", service="pvginkel-ansible-505ac9", type="LoadBalancer"}
++        values: 1x60
++      - series: kube_service_labels{job="kubernetes-service-endpoints", namespace="kubecoder-prd", service="pvginkel-ansible-505ac9", label_app_kubernetes_io_managed_by="kubecoder"}
++        values: 1x60
++      # The speaker withdraws dhcp at 5 m and announces nothing from then on.
++      - series: metallb_speaker_announced{job="kubernetes-pods", namespace="metallb-system", node="srvk8s3", instance="10.1.0.29:7472", ip="10.2.1.10", protocol="layer2", service="dnsmasq-prd/dhcp"}
++        values: 1x4 stale
++    alert_rule_test:
++      - alertname: LoadBalancerNotAnnounced
++        eval_time: 14m
++      - alertname: LoadBalancerNotAnnounced
++        eval_time: 15m
++        exp_alerts: [*dhcp_unannounced]
++      - alertname: LoadBalancerNotAnnounced
++        eval_time: 60m
++        exp_alerts: [*dhcp_unannounced]
++      - {alertname: MetalLBAnnouncementsBlind, eval_time: 60m}
+diff --git a/tests/alert-rules/nodes.yml b/tests/alert-rules/nodes.yml
+new file mode 100644
+index 0000000..d11a7ed
+--- /dev/null
++++ b/tests/alert-rules/nodes.yml
+@@ -0,0 +1,36 @@
++# The nodes group, over synthetic kube-state-metrics series: the Ready condition's status="true"
++# series reads 0 while the node is NotReady or Unknown.
++rule_files:
++  - ../alerting_rules.yml
++evaluation_interval: 1m
++
++tests:
++  - name: a node NotReady fires after 10m and resolves when Ready; a reboot and a 10m spell stay quiet
++    interval: 1m
++    input_series:
++      # srvk8s4: NotReady 5-30 m.
++      - series: kube_node_status_condition{job="kubernetes-service-endpoints", instance="172.16.129.160:8080", node="srvk8s4", condition="Ready", status="true"}
++        values: 1x4 0x25 1x10
++      # srvk8s2: a reboot, NotReady at 5 m.
++      - series: kube_node_status_condition{job="kubernetes-service-endpoints", instance="172.16.129.160:8080", node="srvk8s2", condition="Ready", status="true"}
++        values: 1x4 0 1x35
++      # srvk8s1: NotReady 5-14 m.
++      - series: kube_node_status_condition{job="kubernetes-service-endpoints", instance="172.16.129.160:8080", node="srvk8s1", condition="Ready", status="true"}
++        values: 1x4 0x9 1x26
++    alert_rule_test:
++      - {alertname: NodeNotReady, eval_time: 14m}
++      - alertname: NodeNotReady
++        eval_time: 15m
++        exp_alerts:
++          - &srvk8s4_notready
++            exp_labels: {node: srvk8s4, severity: critical}
++            exp_annotations:
++              summary: srvk8s4 has been NotReady for 10m
++              description: >-
++                The node's kubelet has not reported Ready: the node is down, off the network, or
++                its kubelet is failing. kubectl describe node srvk8s4 gives the Ready condition's
++                reason and when it last changed. Its pods are not running until it is back.
++      - alertname: NodeNotReady
++        eval_time: 30m
++        exp_alerts: [*srvk8s4_notready]
++      - {alertname: NodeNotReady, eval_time: 31m}
+diff --git a/tests/alert-rules/pods.yml b/tests/alert-rules/pods.yml
+new file mode 100644
+index 0000000..d7cc876
+--- /dev/null
++++ b/tests/alert-rules/pods.yml
+@@ -0,0 +1,130 @@
++# The pods group, over synthetic kube-state-metrics series. A container's waiting series exists
++# only while it waits, so each spell ends `stale`, as a scrape that no longer returns it does.
++rule_files:
++  - ../alerting_rules.yml
++evaluation_interval: 1m
++
++tests:
++  - name: a crash loop fires after 15m through running spells under 5m and resolves 5m after its last wait; a 5m running spell restarts the 15m
++    interval: 1m
++    input_series:
++      # dhcp: waits 0-3 m, runs 4-7 m, waits 8-11 m, runs 12-15 m, waits 16-30 m, then runs.
++      - series: kube_pod_container_status_waiting_reason{job="kubernetes-service-endpoints", namespace="dnsmasq-prd", pod="dhcp-8456675446-8lp2h", container="dhcpapp-app", reason="CrashLoopBackOff"}
++        values: 1x3 stale _x3 1x3 stale _x3 1x14 stale
++      # dhcp-app: waits 0-3 m, runs 4-8 m, waits from 9 m.
++      - series: kube_pod_container_status_waiting_reason{job="kubernetes-service-endpoints", namespace="dnsmasq-prd", pod="dhcp-app-5c67456949-wr8zc", container="dhcpapp-app", reason="CrashLoopBackOff"}
++        values: 1x3 stale _x4 1x30
++    alert_rule_test:
++      - {alertname: PodStuckInBackOff, eval_time: 14m}
++      - alertname: PodStuckInBackOff
++        eval_time: 15m
++        exp_alerts:
++          - &dhcp_stuck
++            exp_labels: {namespace: dnsmasq-prd, pod: dhcp-8456675446-8lp2h, severity: warning}
++            exp_annotations:
++              summary: dnsmasq-prd/dhcp-8456675446-8lp2h has been in CrashLoopBackOff or ImagePullBackOff for 15m
++              description: >-
++                A container of the pod keeps crashing or cannot pull its image. kubectl -n
++                dnsmasq-prd describe pod dhcp-8456675446-8lp2h names the container and its reason;
++                kubectl logs --previous gives a crashed container's last output. This alert
++                resolves 5 m after no container of the pod waits on either reason.
++      - alertname: PodStuckInBackOff
++        eval_time: 23m
++        exp_alerts: [*dhcp_stuck]
++      - alertname: PodStuckInBackOff
++        eval_time: 24m
++        exp_alerts:
++          - *dhcp_stuck
++          - &dhcp_app_stuck
++            exp_labels: {namespace: dnsmasq-prd, pod: dhcp-app-5c67456949-wr8zc, severity: warning}
++            exp_annotations:
++              summary: dnsmasq-prd/dhcp-app-5c67456949-wr8zc has been in CrashLoopBackOff or ImagePullBackOff for 15m
++              description: >-
++                A container of the pod keeps crashing or cannot pull its image. kubectl -n
++                dnsmasq-prd describe pod dhcp-app-5c67456949-wr8zc names the container and its
++                reason; kubectl logs --previous gives a crashed container's last output. This alert
++                resolves 5 m after no container of the pod waits on either reason.
++      - alertname: PodStuckInBackOff
++        eval_time: 34m
++        exp_alerts:
++          - *dhcp_stuck
++          - *dhcp_app_stuck
++      - alertname: PodStuckInBackOff
++        eval_time: 35m
++        exp_alerts:
++          - *dhcp_app_stuck
++
++  - name: a pull flipping between ErrImagePull and ImagePullBackOff, an init container's loop and two looping containers each raise one alert per pod after 15m
++    interval: 1m
++    input_series:
++      # keycloak: ErrImagePull 0-1 m, ImagePullBackOff 2-6 m, ErrImagePull 7 m, ImagePullBackOff 8-20 m.
++      - series: kube_pod_container_status_waiting_reason{job="kubernetes-service-endpoints", namespace="keycloak-prd", pod="keycloak-797fb44f99-wc6km", container="keycloak", reason="ErrImagePull"}
++        values: 1x1 stale _x4 1 stale
++      - series: kube_pod_container_status_waiting_reason{job="kubernetes-service-endpoints", namespace="keycloak-prd", pod="keycloak-797fb44f99-wc6km", container="keycloak", reason="ImagePullBackOff"}
++        values: _x2 1x4 stale 1x12 stale
++      # iotsupport: its init container loops, and its app container waits behind it.
++      - series: kube_pod_init_container_status_waiting_reason{job="kubernetes-service-endpoints", namespace="iot-prd", pod="iotsupport-59448bffcf-8zdz9", container="iotsupport-setup", reason="CrashLoopBackOff"}
++        values: 1x20 stale
++      - series: kube_pod_container_status_waiting_reason{job="kubernetes-service-endpoints", namespace="iot-prd", pod="iotsupport-59448bffcf-8zdz9", container="iotsupport", reason="PodInitializing"}
++        values: 1x20 stale
++      # zigbee-control: both containers loop.
++      - series: kube_pod_container_status_waiting_reason{job="kubernetes-service-endpoints", namespace="zigbee2mqtt-prd", pod="zigbee-control-777f569fdf-26gkn", container="app", reason="CrashLoopBackOff"}
++        values: 1x20 stale
++      - series: kube_pod_container_status_waiting_reason{job="kubernetes-service-endpoints", namespace="zigbee2mqtt-prd", pod="zigbee-control-777f569fdf-26gkn", container="sidecar", reason="CrashLoopBackOff"}
++        values: 1x20 stale
++    alert_rule_test:
++      - {alertname: PodStuckInBackOff, eval_time: 14m}
++      - alertname: PodStuckInBackOff
++        eval_time: 15m
++        exp_alerts:
++          - exp_labels: {namespace: keycloak-prd, pod: keycloak-797fb44f99-wc6km, severity: warning}
++            exp_annotations:
++              summary: keycloak-prd/keycloak-797fb44f99-wc6km has been in CrashLoopBackOff or ImagePullBackOff for 15m
++              description: >-
++                A container of the pod keeps crashing or cannot pull its image. kubectl -n
++                keycloak-prd describe pod keycloak-797fb44f99-wc6km names the container and its
++                reason; kubectl logs --previous gives a crashed container's last output. This alert
++                resolves 5 m after no container of the pod waits on either reason.
++          - exp_labels: {namespace: iot-prd, pod: iotsupport-59448bffcf-8zdz9, severity: warning}
++            exp_annotations:
++              summary: iot-prd/iotsupport-59448bffcf-8zdz9 has been in CrashLoopBackOff or ImagePullBackOff for 15m
++              description: >-
++                A container of the pod keeps crashing or cannot pull its image. kubectl -n
++                iot-prd describe pod iotsupport-59448bffcf-8zdz9 names the container and its
++                reason; kubectl logs --previous gives a crashed container's last output. This alert
++                resolves 5 m after no container of the pod waits on either reason.
++          - exp_labels: {namespace: zigbee2mqtt-prd, pod: zigbee-control-777f569fdf-26gkn, severity: warning}
++            exp_annotations:
++              summary: zigbee2mqtt-prd/zigbee-control-777f569fdf-26gkn has been in CrashLoopBackOff or ImagePullBackOff for 15m
++              description: >-
++                A container of the pod keeps crashing or cannot pull its image. kubectl -n
++                zigbee2mqtt-prd describe pod zigbee-control-777f569fdf-26gkn names the container
++                and its reason; kubectl logs --previous gives a crashed container's last output.
++                This alert resolves 5 m after no container of the pod waits on either reason.
++
++  - name: a slow pull, a pod creating for 30m, and a loop whose last wait is at 10m stay quiet; one whose last wait is at 11m fires at 15m only
++    interval: 1m
++    input_series:
++      - series: kube_pod_container_status_waiting_reason{job="kubernetes-service-endpoints", namespace="electronics-inventory-prd", pod="electronics-inventory-78cb6cc7df-hwtxv", container="electronics-inventory", reason="ImagePullBackOff"}
++        values: 1x2 stale
++      - series: kube_pod_container_status_waiting_reason{job="kubernetes-service-endpoints", namespace="storage-prd", pod="storage-55fdbf44c5-wrb82", container="storage", reason="ContainerCreating"}
++        values: 1x30
++      - series: kube_pod_container_status_waiting_reason{job="kubernetes-service-endpoints", namespace="jenkins-prd", pod="iot-support-validation-140-f9k6x", container="jnlp", reason="CrashLoopBackOff"}
++        values: 1x10 stale
++      - series: kube_pod_container_status_waiting_reason{job="kubernetes-service-endpoints", namespace="jenkins-prd", pod="iot-support-validation-141-k2m8q", container="jnlp", reason="CrashLoopBackOff"}
++        values: 1x11 stale
++    alert_rule_test:
++      - {alertname: PodStuckInBackOff, eval_time: 14m}
++      - alertname: PodStuckInBackOff
++        eval_time: 15m
++        exp_alerts:
++          - exp_labels: {namespace: jenkins-prd, pod: iot-support-validation-141-k2m8q, severity: warning}
++            exp_annotations:
++              summary: jenkins-prd/iot-support-validation-141-k2m8q has been in CrashLoopBackOff or ImagePullBackOff for 15m
++              description: >-
++                A container of the pod keeps crashing or cannot pull its image. kubectl -n
++                jenkins-prd describe pod iot-support-validation-141-k2m8q names the container and
++                its reason; kubectl logs --previous gives a crashed container's last output. This
++                alert resolves 5 m after no container of the pod waits on either reason.
++      - {alertname: PodStuckInBackOff, eval_time: 16m}
++      - {alertname: PodStuckInBackOff, eval_time: 30m}
+
+/work/scratch/PrometheusDeploy — P3: git diff 6199854beb76..245ee38060c4
+
+architecture.yaml                      |  10 +++++
+ chart/templates/blackbox-exporter.yaml | 101 ++++++++++++++++++++++++++++++++++++++++++
+ config/prd/values.yaml                 | 115 ++++++++++++++++++++++++++++++++++++++++++++++++
+ tests/alert-rules/dhcp.yml             | 127 +++++++++++++++++++++++++++++++++++++++++++++++++++++
+ tests/alert-rules/oidc-discovery.yml   |  84 +++++++++++++++++++++++++++++++++++
+ 5 files changed, 437 insertions(+)
+
+diff --git a/architecture.yaml b/architecture.yaml
+index 58c4670..8d81456 100644
+--- a/architecture.yaml
++++ b/architecture.yaml
+@@ -24,6 +24,16 @@ images:
+   prometheus-config-reloader: ss:prometheus-config-reloader
+   # node-exporter's product catalog is owned by Ansible (cross-producer ref).
+   node-exporter: ss:prometheus-node-exporter
++  # The companion's (chart/templates/blackbox-exporter.yaml).
++  blackbox-exporter: ss:blackbox-exporter
++
++# The shared catalog (Architecture docs/architecture/catalog.yaml) lacks it.
++products:
++  - id: ss:blackbox-exporter
++    label: Prometheus Blackbox Exporter
++    summary: Probes endpoints over HTTP, DNS, TCP and ICMP and exports the results as Prometheus metrics.
++    homepage: https://github.com/prometheus/blackbox_exporter
++    logo: prometheus
+ 
+ # The Prometheus expression-browser UI and the Alertmanager UI (both entrypoints each).
+ webUi:
+diff --git a/chart/templates/blackbox-exporter.yaml b/chart/templates/blackbox-exporter.yaml
+new file mode 100644
+index 0000000..2b45e50
+--- /dev/null
++++ b/chart/templates/blackbox-exporter.yaml
+@@ -0,0 +1,101 @@
++{{/*
++The blackbox exporter the server's oidc-discovery scrape job probes through
++(config/prd/values.yaml, extraScrapeConfigs). The upstream prometheus chart
++carries none, and Argo CD renders one upstream chart per app, so it is estate
++content here. The job addresses the Service by its literal name in this
++namespace.
++
++The module passes only Keycloak's discovery document for the homelab realm: a
++proxy error page or another realm's answer does not carry its issuer.
++*/}}
++{{- $config := `modules:
++  oidc_discovery:
++    prober: http
++    timeout: 8s
++    http:
++      preferred_ip_protocol: ip4
++      valid_status_codes: [200]
++      fail_if_not_ssl: true
++      fail_if_body_not_matches_regexp:
++        - '"issuer":"https://auth\.ginbov\.nl/realms/homelab"'
++` }}
++{{- $selector := dict "app.kubernetes.io/name" "blackbox-exporter" "app.kubernetes.io/instance" .Release.Name }}
++apiVersion: v1
++kind: ConfigMap
++metadata:
++  name: blackbox-exporter
++  namespace: {{ .Release.Namespace }}
++data:
++  blackbox.yml: |
++    {{- $config | nindent 4 }}
++---
++apiVersion: apps/v1
++kind: Deployment
++metadata:
++  name: blackbox-exporter
++  namespace: {{ .Release.Namespace }}
++spec:
++  replicas: 1
++  selector:
++    matchLabels:
++      {{- toYaml $selector | nindent 6 }}
++  template:
++    metadata:
++      labels:
++        {{- toYaml $selector | nindent 8 }}
++      annotations:
++        # The exporter reads its config only at start.
++        checksum/config: {{ $config | sha256sum }}
++    spec:
++      securityContext:
++        runAsNonRoot: true
++        runAsUser: 65534
++        runAsGroup: 65534
++        seccompProfile:
++          type: RuntimeDefault
++      containers:
++        - name: blackbox-exporter
++          image: quay.io/prometheus/blackbox-exporter:v0.28.0
++          args:
++            - --config.file=/etc/blackbox-exporter/blackbox.yml
++          ports:
++            - name: http
++              containerPort: 9115
++          readinessProbe:
++            httpGet:
++              path: /-/healthy
++              port: http
++          livenessProbe:
++            httpGet:
++              path: /-/healthy
++              port: http
++          resources:
++            requests:
++              memory: 32Mi
++          securityContext:
++            allowPrivilegeEscalation: false
++            capabilities:
++              drop:
++                - ALL
++            readOnlyRootFilesystem: true
++          volumeMounts:
++            - name: config
++              mountPath: /etc/blackbox-exporter
++              readOnly: true
++      volumes:
++        - name: config
++          configMap:
++            name: blackbox-exporter
++---
++apiVersion: v1
++kind: Service
++metadata:
++  name: blackbox-exporter
++  namespace: {{ .Release.Namespace }}
++spec:
++  selector:
++    {{- toYaml $selector | nindent 4 }}
++  ports:
++    - name: http
++      port: 9115
++      targetPort: http
+diff --git a/config/prd/values.yaml b/config/prd/values.yaml
+index 2457e21..35c391d 100644
+--- a/config/prd/values.yaml
++++ b/config/prd/values.yaml
+@@ -54,6 +54,21 @@ extraScrapeConfigs: |
+           - wrkdev.home:9100
+         labels:
+           role: workstation
++  # Through the companion's blackbox exporter (chart/templates/blackbox-exporter.yaml).
++  - job_name: oidc-discovery
++    metrics_path: /probe
++    params:
++      module: [oidc_discovery]
++    static_configs:
++      - targets:
++          - https://auth.ginbov.nl/realms/homelab/.well-known/openid-configuration
++    relabel_configs:
++      - source_labels: [__address__]
++        target_label: __param_target
++      - source_labels: [__param_target]
++        target_label: instance
++      - target_label: __address__
++        replacement: blackbox-exporter.prometheus-prd.svc:9115
+ 
+ serverFiles:
+   # The chart emits this key with plain toYaml (no `tpl`), so the {{ }}
+@@ -488,6 +503,106 @@ serverFiles:
+                 :7472 for 10 m, so LoadBalancerNotAnnounced cannot fire. Check
+                 the speaker targets in Prometheus.
+ 
++      # The blackbox exporter fetches Keycloak's discovery document for the
++      # homelab realm at each scrape, once a minute. On 2026-09-25 it answered
++      # 502 for the whole outage, which took down DHCPApp and four other apps. probe_success is 0 when the exporter ran
++      # the probe and it failed; when the exporter is down or its scrape fails
++      # there is no probe_success at all, which OIDCDiscoveryUnprobed takes, so
++      # neither reads as a passing probe. In 42 days of history keycloak-prd had
++      # no available replica for at most 3 m outside the outage, which reads as
++      # a failing probe for at most 4 m; 5 m passes that.
++      # tests/alert-rules/oidc-discovery.yml walks these edges on synthetic series.
++      - name: oidc-discovery
++        rules:
++          - alert: OIDCDiscoveryFailing
++            expr: |
++              probe_success{job="oidc-discovery"} == 0
++            for: 5m
++            labels:
++              severity: critical
++            annotations:
++              summary: 'OIDC discovery at auth.ginbov.nl has failed for 5m'
++              description: >-
++                {{ $labels.instance }} does not return the homelab realm's
++                discovery document, so apps that log in through Keycloak cannot
++                start, as DHCPApp could not on 2026-09-25. Check that
++                keycloak-prd's pods are Ready (an image pull stuck there was the
++                2026-09-25 cause), then the ingress in front of it. The probe's
++                own log is at
++                http://blackbox-exporter.prometheus-prd.svc:9115/ from inside
++                the cluster.
++          - alert: OIDCDiscoveryUnprobed
++            expr: |
++              absent(probe_success{job="oidc-discovery"})
++            for: 10m
++            labels:
++              severity: warning
++            annotations:
++              summary: 'OIDC discovery is unwatched: no probe result for 10m'
++              description: >-
++                Prometheus has had no result from the oidc-discovery probe for
++                10 m, so OIDCDiscoveryFailing cannot fire. The blackbox-exporter
++                pod in prometheus-prd is down or not Ready, or its scrape fails;
++                check the oidc-discovery target in Prometheus.
++
++      # srviac's dhcp-probe timer (Ansible role dhcp_probe) sends a relay-style
++      # DISCOVER to the DHCP Service every 3 m from outside the cluster and
++      # writes the result into node-exporter's textfile collector, which the
++      # homelab-nodes job scrapes. node-exporter serves the last result until
++      # the next one, and a probe run that errors writes nothing.
++      #
++      # DHCPNotAnswering resolves only on a probe that got an OFFER: while no
++      # probe result is scraped (srviac down or not scraped) it holds its own
++      # ALERTS state. A rollout or reboot drops the Service's announcement for
++      # up to 6 m (the loadbalancers group), which reads as no OFFER for up to
++      # 10 m 10 s at the probe's 3 m cadence and the 1 m scrape; 12 m passes
++      # that.
++      #
++      # DHCPProbeStale fires once the last probe run that finished is over
++      # 15 m old, which three missed runs in a row do not reach, or no result
++      # has been scraped for 15 m. It fires on prd until srviac's play has
++      # installed the probe.
++      # tests/alert-rules/dhcp.yml walks these edges on synthetic series.
++      - name: dhcp
++        rules:
++          - alert: DHCPNotAnswering
++            expr: |
++              max by (instance, server) (dhcp_probe_success{job="homelab-nodes"}) == 0
++              or
++              (
++                max by (instance, server) (ALERTS{alertname="DHCPNotAnswering"})
++                unless on () dhcp_probe_success{job="homelab-nodes"}
++              )
++            for: 12m
++            labels:
++              severity: critical
++            annotations:
++              summary: 'DHCP at {{ $labels.server }} has not answered a DISCOVER for 12m'
++              description: >-
++                srviac's relay-style DISCOVER to {{ $labels.server }} gets no
++                OFFER, so no client on the network gets a lease. On 2026-09-25
++                the dhcp pod in dnsmasq-prd was not Ready, so MetalLB did not
++                announce the Service: check LoadBalancerNotAnnounced and the
++                pod (kubectl -n dnsmasq-prd get pods). journalctl -u
++                dhcp-probe on srviac gives the probe's own view. This alert
++                resolves on the first probe that gets an OFFER.
++          - alert: DHCPProbeStale
++            expr: |
++              time() - max by (instance, server) (dhcp_probe_last_run_timestamp_seconds{job="homelab-nodes"}) > 15 * 60
++              or
++              absent_over_time(dhcp_probe_last_run_timestamp_seconds{job="homelab-nodes"}[15m])
++            labels:
++              severity: warning
++            annotations:
++              summary: 'DHCP is unwatched: no DHCP probe result from srviac for 15m'
++              description: >-
++                No dhcp-probe run on srviac has finished in the last 15 m, or
++                Prometheus has scraped none, so DHCPNotAnswering cannot tell
++                whether DHCP answers. srviac is down or its node-exporter is not
++                scraped (check the homelab-nodes target srviac.home:9100), or
++                the probe errors or its timer stopped (systemctl status
++                dhcp-probe.timer dhcp-probe.service on srviac).
++
+ alertmanager:
+   # See https://github.com/prometheus-community/helm-charts/blob/main/charts/alertmanager/values.yaml
+   service:
+diff --git a/tests/alert-rules/dhcp.yml b/tests/alert-rules/dhcp.yml
+new file mode 100644
+index 0000000..b17004e
+--- /dev/null
++++ b/tests/alert-rules/dhcp.yml
+@@ -0,0 +1,127 @@
++# The dhcp group, over srviac's dhcp-probe results as the homelab-nodes job scrapes them once a
++# minute. node-exporter serves the last probe's result until the next one, every 3 m;
++# dhcp_probe_last_run_timestamp_seconds is when that probe finished, in seconds from the test's
++# start. Where a test does not model the cadence, the timestamp is the scrape's own minute.
++rule_files:
++  - ../alerting_rules.yml
++evaluation_interval: 1m
++
++tests:
++  - name: no OFFER fires after 12m and resolves on the first OFFER
++    interval: 1m
++    input_series:
++      # No OFFER 6-29 m.
++      - series: dhcp_probe_success{job="homelab-nodes", instance="srviac.home:9100", role="iac", server="10.2.1.10"}
++        values: 1x5 0x23 1x10
++      - series: dhcp_probe_last_run_timestamp_seconds{job="homelab-nodes", instance="srviac.home:9100", role="iac", server="10.2.1.10"}
++        values: 0+60x39
++    alert_rule_test:
++      - {alertname: DHCPNotAnswering, eval_time: 17m}
++      - alertname: DHCPNotAnswering
++        eval_time: 18m
++        exp_alerts:
++          - &not_answering
++            exp_labels: {instance: srviac.home:9100, server: 10.2.1.10, severity: critical}
++            exp_annotations: &not_answering_annotations
++              summary: DHCP at 10.2.1.10 has not answered a DISCOVER for 12m
++              description: >-
++                srviac's relay-style DISCOVER to 10.2.1.10 gets no OFFER, so no client on the
++                network gets a lease. On 2026-09-25 the dhcp pod in dnsmasq-prd was not Ready,
++                so MetalLB did not announce the Service: check LoadBalancerNotAnnounced and the
++                pod (kubectl -n dnsmasq-prd get pods). journalctl -u dhcp-probe on srviac gives
++                the probe's own view. This alert resolves on the first probe that gets an OFFER.
++      - alertname: DHCPNotAnswering
++        eval_time: 29m
++        exp_alerts: [*not_answering]
++      - {alertname: DHCPNotAnswering, eval_time: 30m}
++      - {alertname: DHCPProbeStale, eval_time: 29m}
++
++  - name: a rollout's 11m of no OFFER stays quiet
++    interval: 1m
++    input_series:
++      # No OFFER 6-16 m: three failed probes, the next one's OFFER scraped late.
++      - series: dhcp_probe_success{job="homelab-nodes", instance="srviac.home:9100", role="iac", server="10.2.1.10"}
++        values: 1x5 0x10 1x20
++      - series: dhcp_probe_last_run_timestamp_seconds{job="homelab-nodes", instance="srviac.home:9100", role="iac", server="10.2.1.10"}
++        values: 0+60x36
++    alert_rule_test:
++      - {alertname: DHCPNotAnswering, eval_time: 17m}
++      - {alertname: DHCPNotAnswering, eval_time: 18m}
++
++  - name: no OFFER holds through a gap in the probe results and resolves only on an OFFER; the gap fires the stale warning after 15m
++    interval: 1m
++    input_series:
++      # No OFFER from 5 m; srviac is not scraped 15-29 m; no OFFER 30-32 m, an OFFER from 33 m.
++      - series: dhcp_probe_success{job="homelab-nodes", instance="srviac.home:9100", role="iac", server="10.2.1.10"}
++        values: 1x4 0x9 stale _x14 0x2 1x5
++      - series: dhcp_probe_last_run_timestamp_seconds{job="homelab-nodes", instance="srviac.home:9100", role="iac", server="10.2.1.10"}
++        values: 0+60x14 stale _x14 1800+60x8
++    alert_rule_test:
++      - {alertname: DHCPNotAnswering, eval_time: 16m}
++      - alertname: DHCPNotAnswering
++        eval_time: 17m
++        exp_alerts: [*not_answering]
++      - alertname: DHCPNotAnswering
++        eval_time: 29m
++        exp_alerts: [*not_answering]
++      - alertname: DHCPNotAnswering
++        eval_time: 32m
++        exp_alerts: [*not_answering]
++      - {alertname: DHCPNotAnswering, eval_time: 33m}
++      - {alertname: DHCPProbeStale, eval_time: 28m}
++      - alertname: DHCPProbeStale
++        eval_time: 29m
++        exp_alerts:
++          - exp_labels: {job: homelab-nodes, severity: warning}
++            exp_annotations: &stale_annotations
++              summary: 'DHCP is unwatched: no DHCP probe result from srviac for 15m'
++              description: >-
++                No dhcp-probe run on srviac has finished in the last 15 m, or Prometheus has
++                scraped none, so DHCPNotAnswering cannot tell whether DHCP answers. srviac is
++                down or its node-exporter is not scraped (check the homelab-nodes target
++                srviac.home:9100), or the probe errors or its timer stopped (systemctl status
++                dhcp-probe.timer dhcp-probe.service on srviac).
++      - {alertname: DHCPProbeStale, eval_time: 30m}
++
++  - name: a probe that stops running fires the stale warning once its last run is over 15m old
++    interval: 1m
++    input_series:
++      # Runs at 0 and 3 m, then none.
++      - series: dhcp_probe_success{job="homelab-nodes", instance="srviac.home:9100", role="iac", server="10.2.1.10"}
++        values: 1x30
++      - series: dhcp_probe_last_run_timestamp_seconds{job="homelab-nodes", instance="srviac.home:9100", role="iac", server="10.2.1.10"}
++        values: 0x2 180x27
++    alert_rule_test:
++      - {alertname: DHCPProbeStale, eval_time: 18m}
++      - alertname: DHCPProbeStale
++        eval_time: 19m
++        exp_alerts:
++          - exp_labels: {instance: srviac.home:9100, server: 10.2.1.10, severity: warning}
++            exp_annotations: *stale_annotations
++      - {alertname: DHCPNotAnswering, eval_time: 19m}
++
++  - name: three missed runs stay quiet
++    interval: 1m
++    input_series:
++      # Runs at 0 and 3 m; 6, 9 and 12 m are missed; the 15 m run finishes 10 s late and is
++      # scraped at 17 m.
++      - series: dhcp_probe_success{job="homelab-nodes", instance="srviac.home:9100", role="iac", server="10.2.1.10"}
++        values: 1x30
++      - series: dhcp_probe_last_run_timestamp_seconds{job="homelab-nodes", instance="srviac.home:9100", role="iac", server="10.2.1.10"}
++        values: 0x2 180x13 910x14
++    alert_rule_test:
++      - {alertname: DHCPProbeStale, eval_time: 16m}
++      - {alertname: DHCPProbeStale, eval_time: 17m}
++
++  - name: a probe that was never installed fires the stale warning
++    interval: 1m
++    input_series:
++      - series: up{job="homelab-nodes", instance="srviac.home:9100", role="iac"}
++        values: 1x5
++    alert_rule_test:
++      - alertname: DHCPProbeStale
++        eval_time: 1m
++        exp_alerts:
++          - exp_labels: {job: homelab-nodes, severity: warning}
++            exp_annotations: *stale_annotations
++      - {alertname: DHCPNotAnswering, eval_time: 1m}
+diff --git a/tests/alert-rules/oidc-discovery.yml b/tests/alert-rules/oidc-discovery.yml
+new file mode 100644
+index 0000000..4b8fa0e
+--- /dev/null
++++ b/tests/alert-rules/oidc-discovery.yml
+@@ -0,0 +1,84 @@
++# The oidc-discovery group, over the blackbox exporter's probe_success as the oidc-discovery job
++# scrapes it once a minute: 0 when the exporter ran the probe and it failed; when the exporter is
++# down or its scrape fails, the series ends `stale` and there is none.
++rule_files:
++  - ../alerting_rules.yml
++evaluation_interval: 1m
++
++tests:
++  - name: a failing probe fires after 5m and resolves when it passes
++    interval: 1m
++    input_series:
++      # Failing 5-14 m.
++      - series: probe_success{job="oidc-discovery", instance="https://auth.ginbov.nl/realms/homelab/.well-known/openid-configuration"}
++        values: 1x4 0x9 1x10
++    alert_rule_test:
++      - {alertname: OIDCDiscoveryFailing, eval_time: 9m}
++      - alertname: OIDCDiscoveryFailing
++        eval_time: 10m
++        exp_alerts:
++          - &failing
++            exp_labels:
++              job: oidc-discovery
++              instance: https://auth.ginbov.nl/realms/homelab/.well-known/openid-configuration
++              severity: critical
++            exp_annotations:
++              summary: OIDC discovery at auth.ginbov.nl has failed for 5m
++              description: >-
++                https://auth.ginbov.nl/realms/homelab/.well-known/openid-configuration does not
++                return the homelab realm's discovery document, so apps that log in through
++                Keycloak cannot start, as DHCPApp could not on 2026-09-25. Check that
++                keycloak-prd's pods are Ready (an image pull stuck there was the 2026-09-25
++                cause), then the ingress in front of it. The probe's own log is at
++                http://blackbox-exporter.prometheus-prd.svc:9115/ from inside the cluster.
++      - alertname: OIDCDiscoveryFailing
++        eval_time: 14m
++        exp_alerts: [*failing]
++      - {alertname: OIDCDiscoveryFailing, eval_time: 15m}
++      - {alertname: OIDCDiscoveryUnprobed, eval_time: 14m}
++
++  - name: a Keycloak restart that fails the probe for 4m stays quiet
++    interval: 1m
++    input_series:
++      # Failing 5-8 m.
++      - series: probe_success{job="oidc-discovery", instance="https://auth.ginbov.nl/realms/homelab/.well-known/openid-configuration"}
++        values: 1x4 0x3 1x10
++    alert_rule_test:
++      - {alertname: OIDCDiscoveryFailing, eval_time: 9m}
++      - {alertname: OIDCDiscoveryFailing, eval_time: 12m}
++
++  - name: no probe result fires the unwatched warning after 10m, not the failure, and resolves when the scrape is back
++    interval: 1m
++    input_series:
++      # The exporter is down 5-19 m.
++      - series: probe_success{job="oidc-discovery", instance="https://auth.ginbov.nl/realms/homelab/.well-known/openid-configuration"}
++        values: 1x4 stale _x14 1x5
++    alert_rule_test:
++      - {alertname: OIDCDiscoveryUnprobed, eval_time: 14m}
++      - alertname: OIDCDiscoveryUnprobed
++        eval_time: 15m
++        exp_alerts:
++          - &unprobed
++            exp_labels: {job: oidc-discovery, severity: warning}
++            exp_annotations:
++              summary: 'OIDC discovery is unwatched: no probe result for 10m'
++              description: >-
++                Prometheus has had no result from the oidc-discovery probe for 10 m, so
++                OIDCDiscoveryFailing cannot fire. The blackbox-exporter pod in prometheus-prd is
++                down or not Ready, or its scrape fails; check the oidc-discovery target in
++                Prometheus.
++      - alertname: OIDCDiscoveryUnprobed
++        eval_time: 19m
++        exp_alerts: [*unprobed]
++      - {alertname: OIDCDiscoveryUnprobed, eval_time: 20m}
++      - {alertname: OIDCDiscoveryFailing, eval_time: 15m}
++
++  - name: a 10m scrape gap stays quiet
++    interval: 1m
++    input_series:
++      # No result 5-14 m.
++      - series: probe_success{job="oidc-discovery", instance="https://auth.ginbov.nl/realms/homelab/.well-known/openid-configuration"}
++        values: 1x4 stale _x9 1x5
++    alert_rule_test:
++      - {alertname: OIDCDiscoveryUnprobed, eval_time: 14m}
++      - {alertname: OIDCDiscoveryUnprobed, eval_time: 15m}
+
+/work/scratch/PrometheusDeploy — P4: git diff 245ee38060c4..4ad7708f8b69
+
+architecture.yaml                    |  7 +++++--
+ chart/templates/stage-manifests.yaml | 20 +++++++++++++++++++
+ config/prd/values.yaml               | 39 ++++++++++++++++++++++++++++++++++--
+ tests/alert-routing.py               | 61 ++++++++++++++++++++++++++++++++++++++++++++++----------
+ tests/alert-rules/heartbeat.yml      | 22 ++++++++++++++++++++
+ 5 files changed, 134 insertions(+), 15 deletions(-)
+
+diff --git a/architecture.yaml b/architecture.yaml
+index 8d81456..69107c1 100644
+--- a/architecture.yaml
++++ b/architecture.yaml
+@@ -17,8 +17,11 @@ images:
+     realizes: [cap:metrics]
+   alertmanager:
+     product: ss:alertmanager
+-    # Its receivers send through telegram_configs (config/prd/values.yaml).
+-    served_by: ["svc:telegram-bot-api,6708ef33-aaf7-4acd-a10d-560d7a7e1d48"]
++    # Its receivers send through telegram_configs, and the heartbeat through a
++    # webhook to healthchecks.io (config/prd/values.yaml).
++    served_by:
++      - "svc:telegram-bot-api,6708ef33-aaf7-4acd-a10d-560d7a7e1d48"
++      - "svc:healthchecks-io,4d31c387-4492-4a39-8201-f5a9ff13ad22"
+   pushgateway: ss:pushgateway
+   kube-state-metrics: ss:kube-state-metrics
+   prometheus-config-reloader: ss:prometheus-config-reloader
+diff --git a/chart/templates/stage-manifests.yaml b/chart/templates/stage-manifests.yaml
+index 9ad32e6..51f1fbb 100644
+--- a/chart/templates/stage-manifests.yaml
++++ b/chart/templates/stage-manifests.yaml
+@@ -27,3 +27,23 @@ spec:
+       remoteRef:
+         key: eso/prd/prometheus/prd/telegram
+         property: chat_id
++---
++# Alertmanager's healthchecks.io ping URL, mounted by values.yaml's
++# alertmanager.extraSecretMounts for the healthchecks receiver.
++apiVersion: external-secrets.io/v1
++kind: ExternalSecret
++metadata:
++  name: alertmanager-healthchecks
++  namespace: prometheus-prd
++spec:
++  refreshInterval: 1h
++  secretStoreRef:
++    name: openbao-prd
++    kind: ClusterSecretStore
++  target:
++    name: alertmanager-healthchecks
++  data:
++    - secretKey: ping_url
++      remoteRef:
++        key: eso/prd/prometheus/prd/healthchecks
++        property: ping_url
+diff --git a/config/prd/values.yaml b/config/prd/values.yaml
+index 35c391d..bd5004c 100644
+--- a/config/prd/values.yaml
++++ b/config/prd/values.yaml
+@@ -603,6 +603,22 @@ serverFiles:
+                 the probe errors or its timer stopped (systemctl status
+                 dhcp-probe.timer dhcp-probe.service on srviac).
+ 
++      # The dead-man's switch: Heartbeat always fires, and Alertmanager pings
++      # healthchecks.io with it through the healthchecks receiver. When
++      # Prometheus or Alertmanager stops, the pings stop, and healthchecks.io
++      # notifies the operator over Telegram. It never reaches Telegram from here.
++      # tests/alert-rules/heartbeat.yml and tests/alert-routing.py pin both ends.
++      - name: heartbeat
++        rules:
++          - alert: Heartbeat
++            expr: vector(1)
++            annotations:
++              summary: Prometheus and Alertmanager are up; this alert pings healthchecks.io
++              description: >-
++                Always firing, by design. Alertmanager sends it to the
++                healthchecks.io check, never to Telegram; healthchecks.io
++                notifies the operator when the pings stop.
++
+ alertmanager:
+   # See https://github.com/prometheus-community/helm-charts/blob/main/charts/alertmanager/values.yaml
+   service:
+@@ -634,6 +650,12 @@ alertmanager:
+       mountPath: /etc/secrets/telegram
+       secretName: alertmanager-telegram
+       readOnly: true
++    # The healthchecks.io ping URL, materialised by ESO the same way; the
++    # healthchecks receiver reads it as a file.
++    - name: healthchecks
++      mountPath: /etc/secrets/healthchecks
++      secretName: alertmanager-healthchecks
++      readOnly: true
+ 
+   # The chart emits config and templates with plain toYaml (no `tpl`), so the
+   # {{ }} placeholders below reach Alertmanager verbatim.
+@@ -648,6 +670,15 @@ alertmanager:
+       group_interval: 5m
+       repeat_interval: 12h
+       routes:
++        # The heartbeat goes to healthchecks.io alone. A notification is sent
++        # only on a group_interval tick at least repeat_interval after the last
++        # one, so the pings are at most their sum apart; the check's period is
++        # 5m. Its receiver sends no "resolved": a heartbeat that stops sends
++        # nothing.
++        - matchers: ['alertname="Heartbeat"']
++          receiver: healthchecks
++          group_interval: 1m
++          repeat_interval: 1m
+         # D7's two events (ArgoCDDeploy) carry no end time, so each expires at
+         # resolve_timeout whether or not its app has recovered: their receivers
+         # send no "resolved". The argocd rule group's standing alerts carry the
+@@ -669,10 +700,14 @@ alertmanager:
+ 
+     # disable_notifications and send_resolved are static flags, not templates,
+     # so loud and silent need a receiver each, and so do D7's events, which send
+-    # no "resolved". tests/alert-routing.py asserts that the receivers differ
+-    # only in those two flags. parse_mode "" is plain text: expressions and
++    # no "resolved". tests/alert-routing.py asserts that the Telegram receivers
++    # differ only in those two flags. parse_mode "" is plain text: expressions and
+     # annotations carry raw `<`, which Telegram's HTML mode rejects.
+     receivers:
++      - name: healthchecks
++        webhook_configs:
++          - url_file: /etc/secrets/healthchecks/ping_url
++            send_resolved: false
+       - name: telegram-critical
+         telegram_configs:
+           - bot_token_file: /etc/secrets/telegram/bot_token
+diff --git a/tests/alert-routing.py b/tests/alert-routing.py
+index 175ce30..bfea95a 100755
+--- a/tests/alert-routing.py
++++ b/tests/alert-routing.py
+@@ -5,8 +5,10 @@ architecture.yaml's `upstream:` gives.
+ Every alert prd's rules raise reaches the Telegram receiver its severity picks, loud for
+ critical and silent otherwise, and gets a "resolved" when it clears. D7's two Argo CD events,
+ which Alertmanager expires at resolve_timeout whether or not the app recovered, reach receivers
+-that send no "resolved" and are otherwise the same. The tree is walked the way Alertmanager's
+-dispatcher walks it, for the route keys and matcher forms below; anything else fails the test.
++that send no "resolved" and are otherwise the same. The heartbeat is the one exception: it
++reaches the healthchecks.io webhook alone, at most HEARTBEAT_GAP apart, with no "resolved", and
++nothing else reaches that webhook. The tree is walked the way Alertmanager's dispatcher walks it,
++for the route keys and matcher forms below; anything else fails the test.
+ """
+ 
+ import pathlib
+@@ -22,6 +24,14 @@ EVENTS = [
+     {"alertname": "ArgoCDSyncFailed", "severity": "critical", "application": "kubecoder-prd", "namespace": "kubecoder-prd"},
+     {"alertname": "ArgoCDHealthDegraded", "severity": "warning", "application": "kubecoder-prd", "namespace": "kubecoder-prd"},
+ ]
++HEARTBEAT = "Heartbeat"
++WEBHOOK = "healthchecks"
++# healthchecks.io's check period, in seconds.
++HEARTBEAT_GAP = 5 * 60
++# The webhook's whole config: the ping URL only ever as a file, never in the rendered config.
++WEBHOOK_CONFIG = {"url_file": "/etc/secrets/healthchecks/ping_url", "send_resolved": False}
++INHERITED = ("receiver", "group_interval", "repeat_interval")
++DURATION = re.compile(r"(?:(\d+)h)?(?:(\d+)m)?(?:(\d+)s)?")
+ ROUTE_KEYS = {"receiver", "matchers", "routes", "continue", "group_by", "group_wait", "group_interval", "repeat_interval"}
+ MATCHER = re.compile(r'\s*([a-zA-Z_][a-zA-Z0-9_]*)\s*(=~|!~|!=|=)\s*"([^"\\]*)"\s*')
+ # The flags a receiver may differ in; everything else in its telegram config is shared.
+@@ -65,27 +75,45 @@ def matches(matcher, labels):
+     return hit if op == "=~" else not hit
+ 
+ 
+-def receivers(route, labels, inherited=None):
+-    receiver = route.get("receiver", inherited)
++def seconds(duration):
++    parsed = DURATION.fullmatch(duration)
++    if not duration or not parsed:
++        sys.exit(f"duration this test does not model: {duration}")
++    hours, minutes, secs = (int(part or 0) for part in parsed.groups())
++    return hours * 3600 + minutes * 60 + secs
++
++
++def leaves(route, labels, inherited=None):
++    """The routes an alert ends on, each with the INHERITED keys in effect there."""
++    effective = {key: route.get(key, (inherited or {}).get(key)) for key in INHERITED}
+     found = []
+     for child in route.get("routes", []):
+         if all(matches(m, labels) for m in child.get("matchers", [])):
+-            found += receivers(child, labels, receiver)
++            found += leaves(child, labels, effective)
+             if not child.get("continue", False):
+                 break
+-    return found or [receiver]
++    return found or [effective]
+ 
+ 
+ def main():
+     config, rules = render()
+     check_tree(config["route"])
+     telegram = {}
++    failures = []
+     for receiver in config["receivers"]:
++        if receiver["name"] == WEBHOOK:
++            if receiver != {"name": WEBHOOK, "webhook_configs": [WEBHOOK_CONFIG]}:
++                failures.append(f"receiver {WEBHOOK} is not {WEBHOOK_CONFIG} alone: {receiver}")
++            continue
++        if set(receiver) != {"name", "telegram_configs"}:
++            failures.append(f"receiver {receiver['name']} is not one Telegram config: {receiver}")
++            continue
+         (telegram[receiver["name"]],) = receiver["telegram_configs"]
+     alerts = [{"alertname": rule["alert"], **rule.get("labels", {})}
+               for group in rules["groups"] for rule in group["rules"] if "alert" in rule]
+     event_names = {event["alertname"] for event in EVENTS}
+-    failures = []
++    if [a["alertname"] for a in alerts].count(HEARTBEAT) != 1:
++        failures.append(f"prd's rules raise {HEARTBEAT} not exactly once")
+ 
+     shared = {name: {k: v for k, v in cfg.items() if k not in FLAGS} for name, cfg in telegram.items()}
+     first = next(iter(shared.values()))
+@@ -94,15 +122,26 @@ def main():
+             failures.append(f"receiver {name} differs from the others beyond {FLAGS}: {cfg}")
+ 
+     for labels in alerts + EVENTS:
+-        reached = receivers(config["route"], labels)
++        reached = leaves(config["route"], labels)
+         if len(reached) != 1:
+-            failures.append(f"{labels['alertname']} reaches {reached}, not one receiver")
++            failures.append(f"{labels['alertname']} reaches {[r['receiver'] for r in reached]}, not one receiver")
++            continue
++        (leaf,) = reached
++        name = leaf["receiver"]
++        print(f"{labels['alertname']} ({labels.get('severity')}) -> {name}")
++        if labels["alertname"] == HEARTBEAT:
++            if name != WEBHOOK:
++                failures.append(f"{HEARTBEAT} reaches {name}, not {WEBHOOK}")
++            gap = seconds(leaf["group_interval"]) + seconds(leaf["repeat_interval"])
++            if gap > HEARTBEAT_GAP:
++                failures.append(f"{HEARTBEAT} pings up to {gap}s apart, over {HEARTBEAT_GAP}s")
++            continue
++        if name == WEBHOOK:
++            failures.append(f"{labels['alertname']} reaches {WEBHOOK}")
+             continue
+-        (name,) = reached
+         cfg = telegram[name]
+         loud = labels.get("severity") == "critical"
+         resolved = labels["alertname"] not in event_names
+-        print(f"{labels['alertname']} ({labels.get('severity')}) -> {name}")
+         if cfg["disable_notifications"] is loud:
+             failures.append(f"{labels['alertname']}: {name} is {'silent' if loud else 'loud'}")
+         if cfg["send_resolved"] is not resolved:
+diff --git a/tests/alert-rules/heartbeat.yml b/tests/alert-rules/heartbeat.yml
+new file mode 100644
+index 0000000..d0e0402
+--- /dev/null
++++ b/tests/alert-rules/heartbeat.yml
+@@ -0,0 +1,22 @@
++# The heartbeat group: Heartbeat fires from the first evaluation on, with no series at all.
++rule_files:
++  - ../alerting_rules.yml
++evaluation_interval: 1m
++
++tests:
++  - name: Heartbeat fires on an empty TSDB at every evaluation
++    interval: 1m
++    alert_rule_test:
++      - alertname: Heartbeat
++        eval_time: 0m
++        exp_alerts:
++          - &heartbeat
++            exp_labels: {}
++            exp_annotations:
++              summary: Prometheus and Alertmanager are up; this alert pings healthchecks.io
++              description: >-
++                Always firing, by design. Alertmanager sends it to the healthchecks.io check, never
++                to Telegram; healthchecks.io notifies the operator when the pings stop.
++      - alertname: Heartbeat
++        eval_time: 1d
++        exp_alerts: [*heartbeat]

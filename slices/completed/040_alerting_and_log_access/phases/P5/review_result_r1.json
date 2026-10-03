@@ -1,0 +1,4 @@
+{"outcome": "signoff",
+ "summary": "The setup image creates user `reader` with the built-in read-only `viewer` role. The password comes from env READER_PASSWORD, which fails fast when unset, and a rerun converges onto a rotated password. Request shape and the missing-variable failure were both witnessed against client 8.19.3. No findings.",
+ "details": "code_review_r1.md",
+ "findings": []}

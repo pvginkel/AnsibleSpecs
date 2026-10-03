@@ -1,0 +1,1 @@
+mcp-filter: ! cexec iac true 2>/dev/null || cexec iac poetry run pytest -q tests    [  OK  ]

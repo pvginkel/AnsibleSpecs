@@ -1,0 +1,1 @@
+architecture: ! cexec aac-tools true 2>/dev/null || cexec aac-tools arch-validate --quiet */architecture.yaml    [  OK  ]

@@ -1,0 +1,465 @@
+{
+  "store": 1,
+  "slice": "040_alerting_and_log_access",
+  "closed": null,
+  "entries": [
+    {
+      "id": "A1",
+      "kind": "action",
+      "grade": null,
+      "headline": "Before /dev:run-slice: create the healthchecks.io check (period 5 minutes, grace 10 minutes, Telegram integration) and write its ping URL to kv/eso/prd/prometheus/prd/healthchecks",
+      "body": [
+        "Rulings D1/F1: the dead-man's switch is a healthchecks.io check that Alertmanager pings at most every 5 minutes (P4). In healthchecks.io, create a check with period 5 minutes and grace 10 minutes, and route its notification to Telegram through healthchecks.io's own integration (@HealthchecksBot). A new check stays in 'new' state until its first ping, so creating it before the run notifies nobody. Then write its ping URL from stdin: `bao kv put kv/eso/prd/prometheus/prd/healthchecks ping_url=-` (docs/live-infra-access.md, 'Writing OpenBao secrets via bao kv put'). The test phase pushes PrometheusDeploy and Argo CD syncs it to prd straight away. Alertmanager's pod then mounts the Secret ESO materialises from this leaf."
+      ],
+      "consequence": "Without the leaf, Alertmanager's restarted pod waits on its missing Secret mount once the test phase pushes P4, and no alert reaches Telegram until the leaf exists.",
+      "proposal": "do it — one check in healthchecks.io and one bao kv put; the run's push of PrometheusDeploy depends on it.",
+      "evidence": "read",
+      "author": "plan-writer, planning, r1, plan.md P4 and Ordering constraints",
+      "labels": {
+        "trigger": "normal-use",
+        "impact": "broken",
+        "signal": "silent",
+        "repo": "PrometheusDeploy"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": {
+        "reason": "the operator wrote the OpenBao leaf before the run (2026-10-03)",
+        "by": "the operator's ruling",
+        "date": "2026-10-03",
+        "commit": null
+      },
+      "ruling": {
+        "words": "yes, both are in.",
+        "did": "the operator wrote the OpenBao leaf before the run (2026-10-03)",
+        "date": "2026-10-03"
+      }
+    },
+    {
+      "id": "A2",
+      "kind": "action",
+      "grade": null,
+      "headline": "Before /dev:run-slice: generate the filebeat reader's password and write it to kv/eso/prd/elasticsearch/prd/filebeat-reader",
+      "body": [
+        "Settled ruling: the operator generates the read-only Elasticsearch user's password and writes it to OpenBao with one bao kv put. The setup Job takes it through ESO (P6), and the KubeCoder card (KC-124) reads the same leaf later. Write it from stdin, never as a positional argument: `bao kv put kv/eso/prd/elasticsearch/prd/filebeat-reader password=-`. prd's ESO already reads eso/prd/* (ansible/inventories/prd/group_vars/openbao.yml:99), so no policy change is needed."
+      ],
+      "consequence": "Without the leaf, the setup Job's pod waits on its missing Secret after the test phase's push, the reader is never created, and the runbook confirmation (P7, V10) cannot be made.",
+      "proposal": "do it — one bao kv put; the run's ElasticsearchDeploy push and the runbook confirmation depend on it.",
+      "evidence": "read",
+      "author": "plan-writer, planning, r1, plan.md P6 and Ordering constraints",
+      "labels": {
+        "trigger": "normal-use",
+        "impact": "broken",
+        "signal": "loud",
+        "repo": "ElasticsearchDeploy"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": {
+        "reason": "the operator wrote the OpenBao leaf before the run (2026-10-03)",
+        "by": "the operator's ruling",
+        "date": "2026-10-03",
+        "commit": null
+      },
+      "ruling": {
+        "words": "yes, both are in.",
+        "did": "the operator wrote the OpenBao leaf before the run (2026-10-03)",
+        "date": "2026-10-03"
+      }
+    },
+    {
+      "id": "B1",
+      "kind": "defect",
+      "grade": "minor",
+      "headline": "NginxDeploy: https:// on a .home host without its own TLS server answers 200 with the Architecture validation service",
+      "body": [
+        "Witnessed 2026-10-03 with curl: https://kibana.home/, https://prometheus.home/ and https://alertmanager.home/ each return HTTP 200 with the page titled 'Architecture validation service'. Their http:// URLs reach the right app (Kibana's /login redirect, Prometheus' /query, Alertmanager). NginxDeploy declares a default server for port 80 only (chart/files/conf.d/20-default_server.conf:4), so nginx gives an unmatched TLS name to whichever 443 server comes first, and a wrong scheme lands on an unrelated app instead of failing. docs/runbooks/argocd.md's Kibana route gives https://kibana.home today. P7 of this slice corrects that one URL. Other docs and other hosts were not surveyed."
+      ],
+      "consequence": "A reader or agent who follows an https:// .home link gets an unrelated page with a 200 status, not an error. An agent using curl can take it for the service answering.",
+      "proposal": null,
+      "evidence": "witnessed",
+      "author": "plan-writer, planning, round 3, slices/backlog/040_alerting_and_log_access/plan.md P7",
+      "labels": {
+        "trigger": "normal-use",
+        "impact": "degraded",
+        "signal": "silent",
+        "fix": "unknown",
+        "area": "plain",
+        "repo": "NginxDeploy"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
+    },
+    {
+      "id": "A3",
+      "kind": "action",
+      "grade": null,
+      "headline": "Settle V02 after the operator's `ansible-playbook playbooks/site.yml --limit srviac`, …",
+      "body": [
+        "V02 — \"Whether DHCP answers at all: a DISCOVER from outside the pod network\": a probe on srviac sends a relay-style DISCOVER to the DHCP service every few minutes and records the result through srviac's node-exporter. A critical alert fires when no OFFER comes back, and a warning fires when the result is stale or missing. The probe takes no lease. Evidence at planning: one DISCOVER from srviac with giaddr 10.1.0.45, sent from UDP 67, got an OFFER (10.1.1.80) after 3.018 s, from 10.1.0.29:85, and dnsmasq logged DHCPDISCOVER/DHCPOFFER for it (attachments/dhcp-probe.md).",
+        "",
+        "`verification.json` marks V02 owed after: the operator's `ansible-playbook playbooks/site.yml --limit srviac`, which puts the probe on srviac. The run cannot take that action; settle the criterion once it has happened."
+      ],
+      "consequence": "V02 stays unproven until then; the test phase does not settle it.",
+      "proposal": "When that has happened, say so: the session settles V02 in verification.json.",
+      "evidence": "read",
+      "author": "`verification.json`'s `owed_after`, seeded by the plan loop",
+      "labels": {
+        "trigger": "unknown",
+        "impact": "unknown",
+        "signal": "unknown"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
+    },
+    {
+      "id": "A4",
+      "kind": "action",
+      "grade": null,
+      "headline": "Settle V08 after the operator's confirmation, after a drill that stops the pings past …",
+      "body": [
+        "V08 — When Alertmanager's pings stop, healthchecks.io notifies the operator over Telegram (Ruling F1).",
+        "",
+        "`verification.json` marks V08 owed after: the operator's confirmation, after a drill that stops the pings past the check's period plus grace, that healthchecks.io's Telegram notification arrived. The run cannot take that action; settle the criterion once it has happened."
+      ],
+      "consequence": "V08 stays unproven until then; the test phase does not settle it.",
+      "proposal": "When that has happened, say so: the session settles V08 in verification.json.",
+      "evidence": "read",
+      "author": "`verification.json`'s `owed_after`, seeded by the plan loop",
+      "labels": {
+        "trigger": "unknown",
+        "impact": "unknown",
+        "signal": "unknown"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
+    },
+    {
+      "id": "A5",
+      "kind": "action",
+      "grade": null,
+      "headline": "Settle V14 after the operator's `ansible-playbook playbooks/site.yml --limit srviac` …",
+      "body": [
+        "V14 — The srviac play that installs the DHCP probe reports changed=0 on a second run, and its --check --diff shows the first run's changes.",
+        "",
+        "`verification.json` marks V14 owed after: the operator's `ansible-playbook playbooks/site.yml --limit srviac` (check mode, then apply, then a second apply). The run cannot take that action; settle the criterion once it has happened."
+      ],
+      "consequence": "V14 stays unproven until then; the test phase does not settle it.",
+      "proposal": "When that has happened, say so: the session settles V14 in verification.json.",
+      "evidence": "read",
+      "author": "`verification.json`'s `owed_after`, seeded by the plan loop",
+      "labels": {
+        "trigger": "unknown",
+        "impact": "unknown",
+        "signal": "unknown"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
+    },
+    {
+      "id": "B2",
+      "kind": "defect",
+      "grade": "nit",
+      "headline": "Ansible dhcp_probe: --check skips the timer task on every run, so a dry run never shows the timer's enable/start or its drift",
+      "body": [
+        "ansible/roles/dhcp_probe/tasks/main.yml:21-30 has `when: not ansible_check_mode` on the enable/start task. This is the microk8s watchdog.yml:43-45 precedent, and the P1 done-record states it. The first run's dry run previews only the file diffs. On a converged host where dhcp-probe.timer has been stopped or disabled, --check reports nothing, and the apply then reports changed=1."
+      ],
+      "consequence": "A dry run of srviac's play does not show the timer being enabled or a stopped timer being restarted. P3's staleness warning raises a stopped timer in production.",
+      "proposal": null,
+      "evidence": "read",
+      "author": "code-reviewer, P1, round 1, phases/P1/code_review_r1.md F1",
+      "labels": {
+        "trigger": "fault",
+        "impact": "degraded",
+        "signal": "loud",
+        "fix": "design",
+        "area": "plain",
+        "repo": "Ansible"
+      },
+      "notes": [
+        {
+          "by": "consult 1",
+          "date": "2026-10-03",
+          "text": [
+            "Bears on V14 (--check --diff shows the first run's changes): the first dry run shows the role's file diffs but not the timer's enable/start, which the P1 done-record settled deliberately. Whoever settles V14 after the operator's srviac apply reads it with that exception, or the entry is fixed first."
+          ]
+        }
+      ],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
+    },
+    {
+      "id": "E1",
+      "kind": "event",
+      "grade": null,
+      "headline": "The driver left a scratch clone at /work/scratch/PrometheusDeploy (`Target: github:pvginkel/PrometheusDeploy`)",
+      "body": [
+        "The driver cloned (or adopted) `/work/scratch/PrometheusDeploy` for `Target: github:pvginkel/PrometheusDeploy`; the slice's phases for that repo are branched, merged and pushed there.",
+        "",
+        "Deleting it is safe once the slice's commits are on origin — the push check before the doc phase confirms that. The close-out session removes it then and says so under this entry; nothing is asked of the operator. A clone left in place is synced by every later preflight in this environment and adopted by the next `github:` target naming that repo."
+      ],
+      "consequence": "none — the clone is where the run works; left behind, it takes disk space and a sync in every later preflight, until the close-out session removes it.",
+      "proposal": null,
+      "evidence": "witnessed",
+      "author": "the driver's target resolution",
+      "labels": {
+        "trigger": "none",
+        "impact": "none",
+        "signal": "none"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
+    },
+    {
+      "id": "D1",
+      "kind": "decision",
+      "grade": null,
+      "headline": "Keep PodStuckInBackOff firing briefly on a loop that held about 11 minutes, under Ruling D2's 15?",
+      "body": [
+        "In effect (P2, not yet pushed): a 5 m max_over_time look-back bridges crash-loop running spells (≤ 4 m in 42 d of history). As a side effect, a loop whose last wait falls 10–15 m in fires a warning at 15 m and resolves a minute later (tests/alert-rules/pods.yml:119 pins it). Options: (a, in effect) keep it. It costs nothing, and the routing is silent. (b) A shorter look-back. That is a one-line change, but running spells of 4–5 m would then restart the 15 m and could hide real loops. (c) Add a condition that the pod is still waiting or restarting near evaluation time. That reworks the rule and its tests."
+      ],
+      "consequence": "Now and then a silent Telegram warning and its resolve arrive for a pod that recovered before 15 minutes",
+      "proposal": "close — the executor recorded it as an accepted cost, the alert routes silently, and bridging running spells is what D2 asks for",
+      "evidence": "read",
+      "author": "code-reviewer, P2, round 1, phases/P2/code_review_r1.md F3",
+      "labels": {
+        "trigger": "ordinary-condition",
+        "impact": "degraded",
+        "signal": "silent"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
+    },
+    {
+      "id": "T1",
+      "kind": "test-gap",
+      "grade": "minor",
+      "headline": "PrometheusDeploy alert-rules tests: no case pins the `> 0` filter in LoadBalancerNotAnnounced",
+      "body": [
+        "Deleting `> 0` from `max by (service) (metallb_speaker_announced) > 0` (config/prd/values.yaml:459) leaves tests/alert-rules.sh green: loadbalancers.yml never feeds a zero-valued announcement. The P2 done-record (plan.md:307) says the `> 0` mutation fails a test. The code is right today: live speakers delete a withdrawn Service's series rather than write 0."
+      ],
+      "consequence": "A later edit that drops the filter keeps the gate green; a speaker that then wrote 0 for a withdrawn Service would hide that Service from the alert",
+      "proposal": null,
+      "evidence": "witnessed",
+      "author": "code-reviewer, P2, round 1, phases/P2/code_review_r1.md F2 (mutation run)",
+      "labels": {
+        "trigger": "future-change",
+        "impact": "broken",
+        "signal": "silent",
+        "fix": "one-edit",
+        "area": "plain",
+        "repo": "PrometheusDeploy"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": {
+        "reason": "resolved in PrometheusDeploy 0fe00d8: tests/alert-rules/loadbalancers.yml gains a case where the speaker writes 0 for dhcp from 5 m; it fires at 15 m. kc project test --project root green; with '> 0' deleted, tests/alert-rules.sh fails that case (got [])",
+        "by": "wrap-up",
+        "date": "2026-10-03",
+        "commit": "0fe00d8"
+      },
+      "ruling": null
+    },
+    {
+      "id": "B3",
+      "kind": "defect",
+      "grade": "minor",
+      "headline": "PrometheusDeploy DHCPNotAnswering: the self-hold keeps a pending alert alive, so one failed probe then a lost srviac scrape pages critical",
+      "body": [
+        "The hold branch (config/prd/values.yaml:572-575) takes ALERTS{alertname=\"DHCPNotAnswering\"} in any alertstate, so while no dhcp_probe_success is scraped a pending alert keeps counting toward its for: 12m. A single 0 (a rollout gives up to ~10 m of them, per the rule's comment) followed by srviac going unscraped for the rest of the window fires the critical 'has not answered a DISCOVER for 12m'. The plan grades a missing result a warning (plan.md:331-332). Witnessed with promtool on the rendered rules: dhcp_probe_success 1x4 0 stale _x20 fires DHCPNotAnswering at 18 m. tests/alert-rules/dhcp.yml case 3 pins the hold through pending, so it is by design; the argocd group's holds (:328, :356) share the shape. DHCPProbeStale fires beside it."
+      ],
+      "consequence": "Rarely, a critical DHCP page arrives that claims 12 minutes without an OFFER when only one probe failed and srviac then went unscraped; the stale warning arrives with it.",
+      "proposal": "close — two coincident conditions, the stale warning names the real cause, and the pattern matches the argocd group's; card it only if it ever pages.",
+      "evidence": "witnessed",
+      "author": "code reviewer, P3, round 1, phases/P3/code_review_r1.md F1",
+      "labels": {
+        "trigger": "fault",
+        "impact": "degraded",
+        "signal": "silent",
+        "fix": "design",
+        "area": "plain",
+        "repo": "PrometheusDeploy"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
+    },
+    {
+      "id": "E2",
+      "kind": "event",
+      "grade": null,
+      "headline": "The driver left a scratch clone at /work/scratch/ElasticsearchDeploy (`Target: github:pvginkel/ElasticsearchDeploy`)",
+      "body": [
+        "The driver cloned (or adopted) `/work/scratch/ElasticsearchDeploy` for `Target: github:pvginkel/ElasticsearchDeploy`; the slice's phases for that repo are branched, merged and pushed there.",
+        "",
+        "Deleting it is safe once the slice's commits are on origin — the push check before the doc phase confirms that. The close-out session removes it then and says so under this entry; nothing is asked of the operator. A clone left in place is synced by every later preflight in this environment and adopted by the next `github:` target naming that repo."
+      ],
+      "consequence": "none — the clone is where the run works; left behind, it takes disk space and a sync in every later preflight, until the close-out session removes it.",
+      "proposal": null,
+      "evidence": "witnessed",
+      "author": "the driver's target resolution",
+      "labels": {
+        "trigger": "none",
+        "impact": "none",
+        "signal": "none"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
+    },
+    {
+      "id": "P1",
+      "kind": "prose",
+      "grade": "minor",
+      "headline": "Ansible docs/runbooks/argocd.md: the hook-log section says agents already hold ELASTIC_URL/ELASTIC_USER/ELASTIC_PASSWORD, which KC-124 has not delivered",
+      "body": [
+        "The section says an agent holds the reader credential as ELASTIC_URL/ELASTIC_USER/ELASTIC_PASSWORD (:162), and it gives $ELASTIC_URL as http://elasticsearch.home (:180). Exposing these variables is KC-124's work, outside this slice, and no environment has them yet. KC-124 may also choose a different URL."
+      ],
+      "consequence": "Until KC-124 lands, an agent following the API route looks for ELASTIC_* variables it does not have and has to work out the credential path from the OpenBao leaf named alongside.",
+      "proposal": null,
+      "evidence": "read",
+      "author": "code-reviewer, P7, round 1, phases/P7/code_review_r1.md F2",
+      "labels": {
+        "trigger": "normal-use",
+        "impact": "degraded",
+        "signal": "loud",
+        "fix": "one-edit",
+        "repo": "Ansible"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": {
+        "reason": "Ansible 132c4fa rewrote the hook-log section: the credential is given as ELASTIC_URL/ELASTIC_USER/ELASTIC_PASSWORD only by an environment that provides it, and KubeCoder environments do not provide it yet.",
+        "by": "doc phase",
+        "date": "2026-10-03",
+        "commit": "132c4fa"
+      },
+      "ruling": null
+    },
+    {
+      "id": "B4",
+      "kind": "defect",
+      "grade": "minor",
+      "headline": "ArgoCDTools argocd-hook: terraform init fails with 'non-fast-forward update' on the TerraformState backend when hooks run close together",
+      "body": [
+        "Test phase r1, 2026-10-03: right after the pushes, prometheus-prd's PreSync hook (tf-presync-prometheus-prd-*) failed three attempts in a row (08:18-08:21Z): terraform-backend-git logged 'non-fast-forward update' and answered 500 on GET of argocd/PrometheusDeploy/prd/terraform.tfstate, so 'terraform init' gave up after 3 attempts; Argo CD retry limit 3 exhausted, app OutOfSync/Failed. elasticsearch-prd's hook had run at the same time. A manual sync (operation patched with the same revision) then succeeded. pgadmin-prd and filebeat-prd show the same end state (Failed, retried 3 times, 07:34-07:35Z, before this phase's pushes) and still raise ArgoCDSyncStillFailed. Cause not confirmed: concurrent hooks pushing/pulling the shared TerraformState clone is the likely one."
+      ],
+      "consequence": "A deploy-repo push that lands while another hook is running can leave its app OutOfSync/Failed until someone re-syncs it; ArgoCDSyncStillFailed pages for it.",
+      "proposal": "card it against ArgoCDTools; re-sync pgadmin-prd and filebeat-prd now",
+      "evidence": "witnessed",
+      "author": "test-agent, test phase r1, hook pod logs of tf-presync-prometheus-prd-rlcvn",
+      "labels": {
+        "trigger": "ordinary-condition",
+        "impact": "broken",
+        "signal": "loud",
+        "fix": "unknown",
+        "area": "sensitive",
+        "repo": "ArgoCDTools"
+      },
+      "notes": [],
+      "wrap_up": {
+        "outcome": "left",
+        "by": "wrap-up",
+        "date": "2026-10-03",
+        "text": [
+          "The trigger holds: ordinary-condition. Read in ArgoCDTools 3b8e30a and upstream terraform-backend-git v0.1.11. Each hook pod starts its own daemon (presync/backend.py provide()). Every hook pod and iac commit to the same TerraformState main (STATE_REPO_URL/REF). The daemon clones that repository once into memory at Depth 1 (storages/git/git.go:210-225) and keeps the clone for the pod's life (client.go Connect). Every GetState and LockState then runs a go-git Pull of main into that shallow clone (client.go:243-249, 128-134; git.go:311). Another writer pushing to main after the clone (another app's hook, a destroy, an iac apply) can make that pull fail with go-git's 'non-fast-forward update', and the GET returns 500. terraform init's own retries reuse the same shallow clone, so all three attempts fail alike, as the hook log shows. A deploy-repo push lands while other hooks are writing state whenever several deploy repos are pushed together or Argo CD syncs apps in parallel, as this slice's test phase did. Nothing beyond an ordinary push is needed. The signal holds too: loud. The failed hook fails the sync. Retries exhausted leave a SyncError condition, and ArgoCDSyncStillFailed (PrometheusDeploy config/prd/values.yaml:321) fires on that after 10 m; the test phase saw it firing for pgadmin-prd and filebeat-prd. The sensitive area (concurrency) and fix unknown also hold. Possible fixes are a deep clone (an upstream patch or fork), serialising hooks' state writes, or restarting the daemon on this error. All three are design calls in ArgoCDTools, which this slice did not touch."
+        ]
+      },
+      "strike": null,
+      "ruling": null
+    },
+    {
+      "id": "P2",
+      "kind": "prose",
+      "grade": "nit",
+      "headline": "Ansible docs/runbooks/argocd.md: the Kibana route says to create an ad-hoc data view 'if none is saved', but prd already holds a saved filebeat-* view",
+      "body": [
+        "Live 2026-10-03, as reader: GET /api/data_views lists filebeat-* and logstash-http-*; a data view save as reader is refused (insufficient access). The Kibana form was confirmed through Kibana's own HTTP API with the reader's session (login, /internal/search/es on filebeat-* returned the pod's 106 lines, console proxy likewise); the browser-only step 'Use without saving' was not witnessed, and is not needed while the saved view exists."
+      ],
+      "consequence": "none — a reader who finds the saved view is unaffected; the ad-hoc fallback stays unwitnessed.",
+      "proposal": "close",
+      "evidence": "witnessed",
+      "author": "test-agent, test phase r1",
+      "labels": {
+        "trigger": "ordinary-condition",
+        "impact": "none",
+        "signal": "none",
+        "fix": "one-edit",
+        "area": "plain",
+        "repo": "Ansible"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": {
+        "reason": "resolved in Ansible bccf8e1: docs/runbooks/argocd.md now says to pick the saved filebeat-* data view prd holds, and to create the ad-hoc one only should it be gone. kc project test --project root green; build and lint declare nothing for root (exit 3), and the ansible/terraform lint components do not cover docs/",
+        "by": "wrap-up",
+        "date": "2026-10-03",
+        "commit": "bccf8e1"
+      },
+      "ruling": null
+    },
+    {
+      "id": "E3",
+      "kind": "event",
+      "grade": null,
+      "headline": "prometheus-prd's first sync failed on the TerraformState error (B4); the test phase re-synced it by hand",
+      "body": [
+        "After the PrometheusDeploy push the sync failed three times (see B4); the test phase patched an operation sync of revision ffe0364 into the Application with the prd-write kubeconfig, and it succeeded. Everything slice-040 then verified live ran on that sync."
+      ],
+      "consequence": "none — resolved in the run",
+      "proposal": null,
+      "evidence": "witnessed",
+      "author": "test-agent, test phase r1",
+      "labels": {
+        "trigger": "ordinary-condition",
+        "impact": "none",
+        "signal": "none"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
+    },
+    {
+      "id": "E4",
+      "kind": "event",
+      "grade": null,
+      "headline": "Run stopped (blocked) in the doc phase",
+      "body": [
+        "The driver's bail (`blocked`), as it recorded it:",
+        "",
+        "> main in /work/scratch/ElasticsearchDeploy has diverged from origin/main (1 local commit(s) origin lacks, 1 on origin that main lacks), so the doc phase's commits there cannot go out as a fast-forward — bring main up to origin/main there and push it by hand, then resume",
+        "",
+        "Stopped 2026-10-03 10:45; resumed 2026-10-03 10:46."
+      ],
+      "consequence": "none the loop acts on — what the stop needed was settled outside the run before it resumed where it stopped; recorded so the report accounts for every stop the run header counts.",
+      "proposal": null,
+      "evidence": "witnessed",
+      "author": "the driver's bail record in state.json",
+      "labels": {
+        "trigger": "none",
+        "impact": "none",
+        "signal": "none"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
+    }
+  ]
+}

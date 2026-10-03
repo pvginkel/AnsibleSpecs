@@ -1,0 +1,68 @@
+/work/DockerImages — P5: git diff caba37a6fb44..234f665aa16c
+
+elasticsearch-setup/app/main.py       | 23 +++++++++++++++++++++++
+ elasticsearch-setup/architecture.yaml |  3 ++-
+ 2 files changed, 25 insertions(+), 1 deletion(-)
+
+diff --git a/elasticsearch-setup/app/main.py b/elasticsearch-setup/app/main.py
+index 95dbe4c..bfd5f8a 100644
+--- a/elasticsearch-setup/app/main.py
++++ b/elasticsearch-setup/app/main.py
+@@ -6,6 +6,9 @@ ELASTICSEARCH_HOST = os.getenv("ELASTICSEARCH_HOST")
+ ELASTICSEARCH_PASSWORD = os.getenv("ELASTICSEARCH_PASSWORD")
+ KIBANA_PASSWORD = os.getenv("KIBANA_PASSWORD")
+ LOGSTASH_PASSWORD = os.getenv("LOGSTASH_PASSWORD")
++# A missing value fails the Job at start instead of retrying a rejected
++# put_user forever.
++READER_PASSWORD = os.environ["READER_PASSWORD"]
+ 
+ 
+ def wait_for_elasticsearch(es: Elasticsearch):
+@@ -60,6 +63,25 @@ def create_logstash_internal_user(es: Elasticsearch):
+     )
+ 
+ 
++def create_reader_user(es: Elasticsearch):
++    print("Creating reader user")
++
++    # The built-in viewer role reads every index whose name has no leading
++    # dot (data streams included) and logs into Kibana read-only; it holds no
++    # write, cluster or index management privilege. put_user on an existing
++    # user replaces its password, so a rerun converges onto a rotated one.
++    retry_with_delay(
++        lambda: es.security.put_user(
++            username="reader",
++            body={
++                "password": READER_PASSWORD,
++                "roles": ["viewer"],
++                "full_name": "Read-only reader",
++            },
++        )
++    )
++
++
+ def setup_logstash_http_ilm(es: Elasticsearch):
+     print("Configuring logstash-http ILM policy and index template")
+ 
+@@ -125,6 +147,7 @@ if __name__ == "__main__":
+     wait_for_elasticsearch(es)
+     set_kibana_system_password(es)
+     create_logstash_internal_user(es)
++    create_reader_user(es)
+     setup_logstash_http_ilm(es)
+ 
+     print("All done!")
+diff --git a/elasticsearch-setup/architecture.yaml b/elasticsearch-setup/architecture.yaml
+index b1fb577..0659f96 100644
+--- a/elasticsearch-setup/architecture.yaml
++++ b/elasticsearch-setup/architecture.yaml
+@@ -6,7 +6,8 @@ applicationComponents:
+     label: Elasticsearch Setup
+     summary: >-
+       One-shot bootstrap job that waits for Elasticsearch and sets the built-in
+-      user passwords (kibana_system, logstash) after the cluster starts.
++      user passwords (kibana_system, logstash) after the cluster starts, and
++      creates the read-only reader user.
+     introduced: 2024-08-23
+     lifecycle: active
+     stereotype: SoftwareProduct

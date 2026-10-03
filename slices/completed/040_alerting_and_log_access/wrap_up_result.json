@@ -1,0 +1,4 @@
+{"outcome": "done",
+ "summary": "T1 fixed in PrometheusDeploy 0fe00d8: a zero-valued announcement case now pins the `> 0` filter, and the case fails with the filter removed. P2 fixed in Ansible bccf8e1: the runbook's Kibana route now picks the saved filebeat-* view. B4's trigger checked against ArgoCDTools and upstream terraform-backend-git: the labels hold (ordinary-condition, loud), so it is left.",
+ "fixed": ["T1", "P2"], "folded": [], "cards": [], "left": ["B4"],
+ "relabelled": []}

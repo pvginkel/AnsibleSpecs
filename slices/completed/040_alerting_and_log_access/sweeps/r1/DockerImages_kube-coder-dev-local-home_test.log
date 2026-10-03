@@ -1,0 +1,1 @@
+kube-coder-dev-local-home: ! cexec iac true 2>/dev/null || cexec iac uv run --no-project --python /usr/bin/python3 --with pytest python -m pytest -q    [  OK  ]

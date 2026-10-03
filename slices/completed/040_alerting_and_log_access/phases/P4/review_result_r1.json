@@ -1,0 +1,4 @@
+{"outcome": "signoff",
+ "summary": "P4 meets its outcome: Heartbeat always fires, routes only to a url_file webhook with no resolved, and nothing else reaches it. amtool v0.34.1 validates the rendered config, and a local Alertmanager run pinged exactly every 2 minutes. No findings.",
+ "details": "code_review_r1.md",
+ "findings": []}
