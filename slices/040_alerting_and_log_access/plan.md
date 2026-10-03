@@ -366,7 +366,7 @@ Record:
   realm 0 (regex), unknown realm 0 (404). Mutations (hold removed, `for` 4 m, look-back 14 m)
   each fail a test.
 
-### P3a — Architecture: healthchecks.io as an external service
+### P3a — Architecture: healthchecks.io as an external service ✅ DONE 2026-10-03
 
 Target: ../Architecture
 
