@@ -487,7 +487,7 @@ Record:
   witnessed only against a stub client (call shape), not a live cluster — the test phase
   witnesses the user live under Ruling D4.
 
-### P6 — ElasticsearchDeploy: the reader's password from OpenBao into the setup Job
+### P6 — ElasticsearchDeploy: the reader's password from OpenBao into the setup Job ✅ DONE 2026-10-03
 
 Target: github:pvginkel/ElasticsearchDeploy
 
