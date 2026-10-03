@@ -338,7 +338,12 @@
       },
       "notes": [],
       "wrap_up": null,
-      "strike": null,
+      "strike": {
+        "reason": "Ansible 132c4fa rewrote the hook-log section: the credential is given as ELASTIC_URL/ELASTIC_USER/ELASTIC_PASSWORD only by an environment that provides it, and KubeCoder environments do not provide it yet.",
+        "by": "doc phase",
+        "date": "2026-10-03",
+        "commit": "132c4fa"
+      },
       "ruling": null
     },
     {

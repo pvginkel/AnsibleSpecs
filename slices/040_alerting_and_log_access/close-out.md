@@ -4,29 +4,10 @@
      lines are yours to write; everything else is overwritten by the next render.
      `close_out.py show <id>` prints an entry in full. -->
 
-Run: <not yet stamped>
+Run: 2026-10-03 08:54 → 10:34 · 8 phases · 0 bail-outs · 1 test round · doc phase at stage
+writer · run docs
 
 ## Comes to you
-
-### A1 — Before /dev:run-slice: create the healthchecks.io check (period 5 minutes, grace 10 minutes, Telegram integration) and write its ping URL to kv/eso/prd/prometheus/prd/healthchecks
-
-**Proposal:** do it — one check in healthchecks.io and one bao kv put; the run's push of
-PrometheusDeploy depends on it.
-
-**Consequence:** Without the leaf, Alertmanager's restarted pod waits on its missing Secret mount once the test phase pushes P4, and no alert reaches Telegram until the leaf exists.
-
-**Route:** to you — an action
-**Disposition:**
-
-### A2 — Before /dev:run-slice: generate the filebeat reader's password and write it to kv/eso/prd/elasticsearch/prd/filebeat-reader
-
-**Proposal:** do it — one bao kv put; the run's ElasticsearchDeploy push and the runbook
-confirmation depend on it.
-
-**Consequence:** Without the leaf, the setup Job's pod waits on its missing Secret after the test phase's push, the reader is never created, and the runbook confirmation (P7, V10) cannot be made.
-
-**Route:** to you — an action
-**Disposition:**
 
 ### A3 — Settle V02 after the operator's `ansible-playbook playbooks/site.yml --limit srviac`, …
 
@@ -55,11 +36,75 @@ confirmation depend on it.
 **Route:** to you — an action
 **Disposition:**
 
-## For the wrap-up
+### D1 — Keep PodStuckInBackOff firing briefly on a loop that held about 11 minutes, under Ruling D2's 15?
+
+**Proposal:** close — the executor recorded it as an accepted cost, the alert routes silently,
+and bridging running spells is what D2 asks for
+
+**Consequence:** Now and then a silent Telegram warning and its resolve arrive for a pod that recovered before 15 minutes
+
+**Route:** to you — a decision
+**Disposition:**
+
+## Card requests
 
 ### B1 — NginxDeploy: https:// on a .home host without its own TLS server answers 200 with the Architecture validation service · minor
 
 **Consequence:** A reader or agent who follows an https:// .home link gets an unrelated page with a 200 status, not an error. An agent using curl can take it for the service answering.
 
-**Route:** the wrap-up — fix within its bar, or ask for a card
+**Route:** card request — the fix lives in NginxDeploy, which the slice did not touch
 **Disposition:**
+
+## For the wrap-up
+
+### P1 — Ansible docs/runbooks/argocd.md: the hook-log section says agents already hold ELASTIC_URL/ELASTIC_USER/ELASTIC_PASSWORD, which KC-124 has not delivered · minor
+
+**Consequence:** Until KC-124 lands, an agent following the API route looks for ELASTIC_* variables it does not have and has to work out the credential path from the OpenBao leaf named alongside.
+
+**Route:** the wrap-up — fix
+**Disposition:**
+
+### T1 — PrometheusDeploy alert-rules tests: no case pins the `> 0` filter in LoadBalancerNotAnnounced · minor
+
+**Consequence:** A later edit that drops the filter keeps the gate green; a speaker that then wrote 0 for a withdrawn Service would hide that Service from the alert
+
+**Route:** the wrap-up — fix
+**Disposition:**
+
+### P2 — Ansible docs/runbooks/argocd.md: the Kibana route says to create an ad-hoc data view 'if none is saved', but prd already holds a saved filebeat-* view · nit
+
+**Proposal:** close
+
+**Consequence:** none — a reader who finds the saved view is unaffected; the ad-hoc fallback stays unwitnessed.
+
+**Route:** the wrap-up — fix
+**Disposition:**
+
+## Closed
+
+### B3 — PrometheusDeploy DHCPNotAnswering: the self-hold keeps a pending alert alive, so one failed probe then a lost srviac scrape pages critical · minor
+
+**Route:** closed — it needs a fault
+**Disposition:**
+
+### B4 — ArgoCDTools argocd-hook: terraform init fails with 'non-fast-forward update' on the TerraformState backend when hooks run close together · minor
+
+**Route:** closed — the fix lives in ArgoCDTools, which the slice did not touch
+**Disposition:**
+
+### B2 — Ansible dhcp_probe: --check skips the timer task on every run, so a dry run never shows the timer's enable/start or its drift · nit
+
+**Route:** closed — it needs a fault
+**Disposition:**
+
+## Record
+
+### E1 — The driver left a scratch clone at /work/scratch/PrometheusDeploy (`Target: github:pvginkel/PrometheusDeploy`)
+
+### E2 — The driver left a scratch clone at /work/scratch/ElasticsearchDeploy (`Target: github:pvginkel/ElasticsearchDeploy`)
+
+### E3 — prometheus-prd's first sync failed on the TerraformState error (B4); the test phase re-synced it by hand
+
+### ~~A1 — Before /dev:run-slice: create the healthchecks.io check (period 5 minutes, grace 10 minutes, Telegram integration) and write its ping URL to kv/eso/prd/prometheus/prd/healthchecks~~ — the operator wrote the OpenBao leaf before the run (2026-10-03); struck by the operator's ruling
+
+### ~~A2 — Before /dev:run-slice: generate the filebeat reader's password and write it to kv/eso/prd/elasticsearch/prd/filebeat-reader~~ — the operator wrote the OpenBao leaf before the run (2026-10-03); struck by the operator's ruling
