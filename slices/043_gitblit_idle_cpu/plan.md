@@ -82,7 +82,7 @@ fixed; planning is transcription into one GitSyncDeploy phase.
   `chart/files/gitblit/gitblit.properties` sets no Lucene keys today, so Gitblit's 2-minute
   default is what runs).
 
-### P1 — gitblit-app: explicit GCs disabled, CPU request removed
+### P1 — gitblit-app: explicit GCs disabled, CPU request removed ✅ DONE 2026-10-03
 
 Target: github:pvginkel/GitSyncDeploy
 
