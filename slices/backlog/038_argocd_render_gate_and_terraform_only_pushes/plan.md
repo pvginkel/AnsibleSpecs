@@ -244,11 +244,12 @@ at planning pins `0.3.1` (Grounding). ArgoCDDeploy pins nothing and is not bumpe
   has one, is run in this phase (KubeCoderDeploy's, like FieldnotesDeploy's, opens with
   `chart-deps`, which resolves against charts.home); a repo without one is proven by resolving
   its dependencies against charts.home and rendering. Either way the bumped render carries the
-  ConfigMap. The bump turns no gate red: a red it causes because the repo states the version in another place makes
-  that place part of the bump; a red it causes for any other reason is outside a library-version
-  bump and is raised, not worked around. A red the parent commit already shows is not the bump's:
-  it is recorded as such, with the parent's result, and goes in the close-out report; the repo is
-  pushed like the rest, since the bump changes nothing that red rests on.
+  ConfigMap. The bump turns no gate red: a red it causes because the repo states the version in
+  another place makes that place part of the bump; a red it causes for any other reason is
+  outside a library-version bump and is raised, not worked around. A red the parent commit
+  already shows is not the bump's: it is recorded as such, with the parent's result, and goes in
+  the close-out report; the repo is pushed like the rest, since the bump changes nothing that red
+  rests on.
 - **The at-risk list (ruling D2).** For every app-stage the bumps reach: did its deploy repo's
   `terraform/` or `config/*/*.tfvars` change between the revision of its last sync operation
   (its Application's status, read-only from prd; a multi-source app's deploy-repo revision is
