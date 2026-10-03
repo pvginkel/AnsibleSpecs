@@ -184,9 +184,9 @@ this phase the same include also renders a small ordinary (non-hook) ConfigMap c
 `hook.revision`, so two commits of a deploy repo render differently and Argo auto-syncs every
 push.
 
-- **A consumer changes nothing but its pin.** The one-line include every deploy repo carries
-  (`chart/templates/tf-presync-hook.yaml`, e.g. FieldnotesDeploy's) stays as it is, and no new
-  value is asked of it.
+- **A consumer changes nothing but its library version** (ruling r1 F1). The one-line include
+  every deploy repo carries (`chart/templates/tf-presync-hook.yaml`, e.g. FieldnotesDeploy's)
+  stays as it is, and no new value is asked of it.
 - **It lives with the app's own objects**, in `hook.namespace`, so it is pruned with the app;
   the AppProject restricts only cluster-scoped kinds (ArgoCDDeploy
   `chart/templates/appproject.yaml:33`). Not in argocd-hooks: that namespace holds the hook's
@@ -210,20 +210,24 @@ which builds the charts-home image, commits its build pin into ChartsDeploy, and
 charts-prd (Charts README § How a publish reaches charts.home). No app changes yet: no consumer
 pins the new version.
 
-Then FieldnotesDeploy's homelab-shared pin (`chart/Chart.yaml`, `"0.3.1"` today) moves to the new
-version with its `chart/Chart.lock` re-resolved, and nothing else changes. The gate
-(`kc project test`, whose first step `chart-deps` resolves the lock against charts.home) is
-green, and its prd render carries the ConfigMap with the revision the gate passes. Nothing is
-pushed: this commit is the first push of the test phase's live proof.
+Then FieldnotesDeploy's library version moves to the new one wherever the repo states it — its
+homelab-shared pin (`chart/Chart.yaml:8`, `"0.3.1"` today) and its re-resolved `chart/Chart.lock`;
+no test of its own pins the version — and nothing else changes. The gate (`kc project test`,
+whose first step `chart-deps` resolves the lock against charts.home) is green, and its prd render
+carries the ConfigMap with the revision the gate passes. Nothing is pushed: this commit is the
+first push of the test phase's live proof.
 
 ### P5 — Every other deploy repo pins the new library version, ready to push in batches
 
 Target: root
 
 Ruling D2. Every deploy repo whose chart pins homelab-shared, FieldnotesDeploy aside (P4), gets
-the same bump — the pin and its re-resolved `Chart.lock`, nothing else. The set comes from the
-registry (ArgoCDDeploy `releases/values.yaml`, one `repo` per app); every consumer read at
-planning pins `0.3.1` (Grounding). ArgoCDDeploy pins nothing and is not bumped.
+the same bump — its library version wherever the repo states it, and nothing else (ruling r1 F1):
+the `chart/Chart.yaml` pin, its re-resolved `Chart.lock`, and any test of the repo's own that pins
+the version. The one known is KubeCoderDeploy's `tests/render-chart.py` `LIBRARY` (`:26`), which
+`check_library` (`:209-213`) holds `chart/Chart.yaml`'s dependency list equal to. The set comes
+from the registry (ArgoCDDeploy `releases/values.yaml`, one `repo` per app); every consumer read
+at planning pins `0.3.1` (Grounding). ArgoCDDeploy pins nothing and is not bumped.
 
 - **Where the edits land.** Each repo's clone under `/work/scratch/<Repo>` (cloned there when
   absent), on `main`, brought to origin's head first; one commit, its only one ahead of origin.
@@ -236,16 +240,23 @@ planning pins `0.3.1` (Grounding). ArgoCDDeploy pins nothing and is not bumped.
 - **KubeCoderDeploy** takes its commit on `main` as well: kubecoder-dev syncs from it, and
   kubecoder-prd tracks the `prd` branch (`releases/values.yaml:172-174`, D34), which only the
   operator's KubeCoder/Promote-PRD moves.
-- **Each bumped chart resolves its dependencies against charts.home and renders the
-  ConfigMap** — proven per repo in this phase.
+- **Each bumped repo's own gate runs at its bump commit.** Its `kc project test`, where the repo
+  has one, is run in this phase (KubeCoderDeploy's, like FieldnotesDeploy's, opens with
+  `chart-deps`, which resolves against charts.home); a repo without one is proven by resolving
+  its dependencies against charts.home and rendering. Either way the bumped render carries the
+  ConfigMap. The bump turns no gate red: a red it causes because the repo states the version in another place makes
+  that place part of the bump; a red it causes for any other reason is outside a library-version
+  bump and is raised, not worked around. A red the parent commit already shows is not the bump's:
+  it is recorded as such, with the parent's result, and goes in the close-out report; the repo is
+  pushed like the rest, since the bump changes nothing that red rests on.
 - **The at-risk list (ruling D2).** For every app-stage the bumps reach: did its deploy repo's
   `terraform/` or `config/*/*.tfvars` change between the revision of its last sync operation
   (its Application's status, read-only from prd; a multi-source app's deploy-repo revision is
   one of several) and the bump's parent? Every app that did is named in the done-record with the
   commits its bump push will apply.
 - **A ledger in the slice folder** lists every bumped repo — repo, clone path, branch, commit,
-  and its at-risk finding. It is the test phase's push list, and the review reads the commits
-  through it: this phase leaves no commit on the Ansible branch.
+  its gate's result, and its at-risk finding. It is the test phase's push list, and the review
+  reads the commits through it: this phase leaves no commit on the Ansible branch.
 
 ## Not in scope
 

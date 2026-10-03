@@ -27,7 +27,7 @@
     {
       "id": "V04",
       "area": "D1 library mechanism",
-      "description": "homelab-shared's hook include renders a small ordinary, non-hook ConfigMap carrying the synced commit (`hook.revision`), so two commits of a deploy repo render differently; a consumer changes nothing but its version pin; no manual step, no gate, no new credential. The Charts consumer gate asserts the ConfigMap is rendered, is not a hook, and carries the revision. (Planning, verified 2026-10-03: today the include renders only the PreSync RoleBinding and Job — Charts charts/homelab-shared/templates/_tf-presync-hook.tpl:42-90 — and hook.revision reaches only the Job's args, :85.)",
+      "description": "homelab-shared's hook include renders a small ordinary, non-hook ConfigMap carrying the synced commit (`hook.revision`), so two commits of a deploy repo render differently; a consumer changes nothing but its library version; no manual step, no gate, no new credential. The Charts consumer gate asserts the ConfigMap is rendered, is not a hook, and carries the revision. (Planning, verified 2026-10-03: today the include renders only the PreSync RoleBinding and Job — Charts charts/homelab-shared/templates/_tf-presync-hook.tpl:42-90 — and hook.revision reaches only the Job's args, :85.)",
       "verdict": null,
       "rationale": "",
       "evidence": []
@@ -59,7 +59,15 @@
     {
       "id": "V08",
       "area": "D2 estate rollout",
-      "description": "ChartsDeploy's bump is the same pin-and-lock change as every other deploy repo's — no deploy repo commits the library tarball (AnsibleSpecs argo-cd/design.md:140); charts-prd syncs at the bump commit, its PreSync hook runs, and afterwards https://charts.home/index.yaml still lists every published homelab-shared version, the new one included.",
+      "description": "ChartsDeploy's bump is the same library-version change as every other deploy repo's — no deploy repo commits the library tarball (AnsibleSpecs argo-cd/design.md:140); charts-prd syncs at the bump commit, its PreSync hook runs, and afterwards https://charts.home/index.yaml still lists every published homelab-shared version, the new one included.",
+      "verdict": null,
+      "rationale": "",
+      "evidence": []
+    },
+    {
+      "id": "V11",
+      "area": "D2 estate rollout",
+      "description": "A consumer's bump is its library version wherever the repo states it, and nothing else: the chart/Chart.yaml pin, its re-resolved Chart.lock, and any test of the repo's own that pins the version (ruling r1 F1). Each bumped repo's own `kc project test`, where it has one, runs at its bump commit and its result is in the rollout ledger; the bump turns none red. (Planning, verified 2026-10-03: KubeCoderDeploy pins the version a second time in tests/render-chart.py:26 `LIBRARY`, and check_library — :209-213, called at :522 — refuses a chart/Chart.yaml dependency list that differs from it; that script is a step of the repo's `kc project test`, .kubecoder/project.yaml `test:`.)",
       "verdict": null,
       "rationale": "",
       "evidence": []
