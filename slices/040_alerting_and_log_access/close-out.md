@@ -4,8 +4,8 @@
      lines are yours to write; everything else is overwritten by the next render.
      `close_out.py show <id>` prints an entry in full. -->
 
-Run: 2026-10-03 08:54 → 10:34 · 8 phases · 0 bail-outs · 1 test round · doc phase at stage
-writer · run docs
+Run: 2026-10-03 08:54 → 10:45 · 8 phases · 0 bail-outs · 1 test round · doc phase at stage
+gate · wrap-up landed · run docs
 
 ## Comes to you
 
@@ -55,31 +55,6 @@ and bridging running spells is what D2 asks for
 **Route:** card request — the fix lives in NginxDeploy, which the slice did not touch
 **Disposition:**
 
-## For the wrap-up
-
-### P1 — Ansible docs/runbooks/argocd.md: the hook-log section says agents already hold ELASTIC_URL/ELASTIC_USER/ELASTIC_PASSWORD, which KC-124 has not delivered · minor
-
-**Consequence:** Until KC-124 lands, an agent following the API route looks for ELASTIC_* variables it does not have and has to work out the credential path from the OpenBao leaf named alongside.
-
-**Route:** the wrap-up — fix
-**Disposition:**
-
-### T1 — PrometheusDeploy alert-rules tests: no case pins the `> 0` filter in LoadBalancerNotAnnounced · minor
-
-**Consequence:** A later edit that drops the filter keeps the gate green; a speaker that then wrote 0 for a withdrawn Service would hide that Service from the alert
-
-**Route:** the wrap-up — fix
-**Disposition:**
-
-### P2 — Ansible docs/runbooks/argocd.md: the Kibana route says to create an ad-hoc data view 'if none is saved', but prd already holds a saved filebeat-* view · nit
-
-**Proposal:** close
-
-**Consequence:** none — a reader who finds the saved view is unaffected; the ad-hoc fallback stays unwitnessed.
-
-**Route:** the wrap-up — fix
-**Disposition:**
-
 ## Closed
 
 ### B3 — PrometheusDeploy DHCPNotAnswering: the self-hold keeps a pending alert alive, so one failed probe then a lost srviac scrape pages critical · minor
@@ -108,3 +83,9 @@ and bridging running spells is what D2 asks for
 ### ~~A1 — Before /dev:run-slice: create the healthchecks.io check (period 5 minutes, grace 10 minutes, Telegram integration) and write its ping URL to kv/eso/prd/prometheus/prd/healthchecks~~ — the operator wrote the OpenBao leaf before the run (2026-10-03); struck by the operator's ruling
 
 ### ~~A2 — Before /dev:run-slice: generate the filebeat reader's password and write it to kv/eso/prd/elasticsearch/prd/filebeat-reader~~ — the operator wrote the OpenBao leaf before the run (2026-10-03); struck by the operator's ruling
+
+### ~~P1 — Ansible docs/runbooks/argocd.md: the hook-log section says agents already hold ELASTIC_URL/ELASTIC_USER/ELASTIC_PASSWORD, which KC-124 has not delivered · minor~~ — Ansible 132c4fa rewrote the hook-log section: the credential is given as ELASTIC_URL/ELASTIC_USER/ELASTIC_PASSWORD only by an environment that provides it, and KubeCoder environments do not provide it yet.; struck by doc phase
+
+### ~~P2 — Ansible docs/runbooks/argocd.md: the Kibana route says to create an ad-hoc data view 'if none is saved', but prd already holds a saved filebeat-* view · nit~~ — resolved in Ansible bccf8e1: docs/runbooks/argocd.md now says to pick the saved filebeat-* data view prd holds, and to create the ad-hoc one only should it be gone. kc project test --project root green; build and lint declare nothing for root (exit 3), and the ansible/terraform lint components do not cover docs/; struck by wrap-up
+
+### ~~T1 — PrometheusDeploy alert-rules tests: no case pins the `> 0` filter in LoadBalancerNotAnnounced · minor~~ — resolved in PrometheusDeploy 0fe00d8: tests/alert-rules/loadbalancers.yml gains a case where the speaker writes 0 for dhcp from 5 m; it fires at 15 m. kc project test --project root green; with '> 0' deleted, tests/alert-rules.sh fails that case (got []); struck by wrap-up
