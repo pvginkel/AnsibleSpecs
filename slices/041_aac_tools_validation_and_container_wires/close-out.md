@@ -4,8 +4,8 @@
      lines are yours to write; everything else is overwritten by the next render.
      `close_out.py show <id>` prints an entry in full. -->
 
-Run: 2026-10-03 08:54 → 09:17 · 4 phases · 0 bail-outs · 1 test round · doc phase at stage
-writer · run docs
+Run: 2026-10-03 08:54 → 09:21 · 4 phases · 0 bail-outs · 1 test round · doc phase at stage
+gate · wrap-up landed · run docs
 
 ## Comes to you
 
@@ -18,15 +18,6 @@ writer · run docs
 **Route:** to you — an action
 **Disposition:**
 
-## For the wrap-up
-
-### B1 — Architecture service: a type error on an empty value prints an empty source scalar · minor
-
-**Consequence:** an author who leaves a required string blank gets a slightly garbled message; the line and 'parsed as null' still identify the problem
-
-**Route:** the wrap-up — fix
-**Disposition:**
-
 ### I1 — Architecture: quote YAML-1.2 number-like strings in the collector's published architecture.yaml too?
 
 **Proposal:** card — a cheap guard. The collector's published YAML should quote the same way the
@@ -34,7 +25,7 @@ generators now do, but nothing misreads it today, so it does not belong in this 
 
 **Consequence:** none today; once live data puts a number-like string into the merged dataset, any YAML 1.2 reader of architecture.yaml reads it as a number while architecture.json stays right
 
-**Route:** the wrap-up — a small change, within its bar
+**Route:** to you — an improvement
 **Disposition:**
 
 ## Closed
@@ -52,3 +43,5 @@ generators now do, but nothing misreads it today, so it does not belong in this 
 ## Record
 
 ### E1 — The driver left a scratch clone at /work/scratch/FieldnotesDeploy (`Target: github:pvginkel/FieldnotesDeploy`)
+
+### ~~B1 — Architecture service: a type error on an empty value prints an empty source scalar · minor~~ — fixed in Architecture f6c0bc3: the type translator takes the quoted-source branch only for a non-empty source scalar, so an empty one falls back to 'value null is not of expected type string' with its line; new test in service/test/error-translate.test.ts (red without the fix), kc project test --project service green; struck by wrap-up
