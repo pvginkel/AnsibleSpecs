@@ -67,6 +67,17 @@
 - The revert is a forward change to the shape every other deploy repo has (tarball gitignored, the dependency build step in lint and test, the check script removed), not a git revert — later commits touched the same files; the Charts README paragraph and the argo-cd design doc's vendoring note go with it, and the design doc's accepted-dependency caveat is restated without the vendoring. That the vendoring never covered a rebuild strengthens it.
 - Consequence to confirm: once reverted, a broken charts.home release can no longer be repaired through Argo while charts.home is down — it is repaired by hand with the same recipe, or a rollout undo.
 - No Ansible change to break the External Secrets/DNS cycle (such as pinning OpenBao's name in CoreDNS); the rebuild procedure hand-stages the two Secrets instead, and a power-cut cold boot is unaffected because the Secrets survive in the cluster.
+  **Reversed** after the desk check: CoreDNS pins OpenBao's name instead, which removes the loop (one hand-staged Secret left, External Secrets' own). **Operator.** "Go" (chat, 2026-10-03)
 - Keycloak's cold-start chain — the shared CNPG Postgres cluster through its pooler, the registry for the image unless cached on the node, the 100Mi CephFS themes volume made by Terraform, nginx for its public hostname — is written into the existing cold-boot runbook's Keycloak step, and into the rebuild section where its volume is Terraform-made.
 - Alerting on Keycloak down is the alerting slice, not this one.
 - Size: about four implementation phases plus the test and doc phases — the forward revert in the charts deploy repo and in the registry deploy repo, the rebuild bootstrap procedure in the Ansible runbooks with its desk check, break-glass and Keycloak's chain in the cold-boot runbook; plus a Charts README paragraph and the argo-cd design doc in AnsibleSpecs. Repos: ChartsDeploy, RegistryDeploy, Ansible, Charts, AnsibleSpecs; KeycloakDeploy only if D2 goes the other way, ArgoCDDeploy only if D3 goes the other way.
+
+## Outcome
+
+**Not planned or run as a slice.** The operator asked whether the slice was still worth one
+("Is this slice sized? Writing the runbook you can do now.") and, on the proposal to do the
+revert ad hoc as well and close the card, said "Go" (chat, 2026-10-03). Delivered in the
+planning session: Ansible 1588a7f (cold-boot break-glass and Keycloak's chain), f9d2e08 (the
+CoreDNS pin; takes effect at the operator's next site-k8s.yml), 3c9ca32 (cluster-bootstrap
+runbook and scripts/argo-hand-render.py, desk-checked against prd, not rehearsed); ChartsDeploy
+69ecb9f and RegistryDeploy e53c36b reverts; Charts cfae346 README; AnsibleSpecs 07c9d5b argo-cd design.md.
