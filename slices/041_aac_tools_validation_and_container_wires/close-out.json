@@ -19,13 +19,27 @@
         "benefit": "user",
         "felt": "after-change",
         "change": "adjust",
-        "size": "one-edit",
+        "size": "design",
         "product-call": "no",
         "prevents": "degraded",
         "area": "plain",
         "repo": "Architecture"
       },
-      "notes": [],
+      "notes": [
+        {
+          "by": "wrap-up",
+          "date": "2026-10-03",
+          "text": [
+            "relabelled (size: one-edit → design): Not one edit: the collector (tooling/collect.py:1163) has no quoting dumper to switch to. The one in Architecture lives in tools/ha-fleet/gen-ha-fleet.py (Yaml12SafeDumper, a hyphen-named standalone script tooling/ cannot import), the other in ArgoCDTools. The change is either a third copy of the YAML 1.2 int/float resolvers in collect.py or moving them into tooling/_arch.py and sharing them — a choice — and it adds a Dumper subclass with resolvers to the writer of the published dataset."
+          ],
+          "relabel": {
+            "size": [
+              "one-edit",
+              "design"
+            ]
+          }
+        }
+      ],
       "wrap_up": null,
       "strike": null,
       "ruling": null
@@ -52,7 +66,12 @@
       },
       "notes": [],
       "wrap_up": null,
-      "strike": null,
+      "strike": {
+        "reason": "fixed in Architecture f6c0bc3: the type translator takes the quoted-source branch only for a non-empty source scalar, so an empty one falls back to 'value null is not of expected type string' with its line; new test in service/test/error-translate.test.ts (red without the fix), kc project test --project service green",
+        "by": "wrap-up",
+        "date": "2026-10-03",
+        "commit": "f6c0bc3"
+      },
       "ruling": null
     },
     {
@@ -101,7 +120,14 @@
         "repo": "ArgoCDTools"
       },
       "notes": [],
-      "wrap_up": null,
+      "wrap_up": {
+        "outcome": "left",
+        "by": "wrap-up",
+        "date": "2026-10-03",
+        "text": [
+          "trigger future-change holds: aac-tools/image/gen_architecture.py main() writes the artifact with f.write(dump_yaml(envelope)) (line 1245), dump_yaml being the quoting dumper (line 1282); no other write of the artifact exists, so the gap shows only after an edit of that block. Signal loud holds: an unquoted number-like string then fails the repo's AaC Validate stage with a type error."
+        ]
+      },
       "strike": null,
       "ruling": null
     },

@@ -1,0 +1,4 @@
+{"outcome": "done",
+ "summary": "B1 fixed in Architecture f6c0bc3 (empty source scalar falls back to the value-only type message, with a test). T1's future-change trigger checked and left. I1 relabelled size one-edit -> design: the collector has no importable quoting dumper, so sharing vs copying the resolvers is a choice.",
+ "fixed": ["B1"], "folded": [], "cards": [], "left": ["T1"],
+ "relabelled": ["I1"]}
