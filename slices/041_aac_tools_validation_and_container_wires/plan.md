@@ -193,7 +193,7 @@ Record:
   form, and a mixed document (non-number-like strings, int, float, inf, bool, null, list) whose
   `dump_yaml` output equals `yaml.safe_dump`'s.
 
-### P3 — aac-tools ships the new arch-validate and quotes strings YAML 1.2 reads as numbers
+### P3 — aac-tools ships the new arch-validate and quotes strings YAML 1.2 reads as numbers ✅ DONE 2026-10-03
 
 Target: aac-tools
 
