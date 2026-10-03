@@ -2,5 +2,52 @@
   "store": 1,
   "slice": "040_alerting_and_log_access",
   "closed": null,
-  "entries": []
+  "entries": [
+    {
+      "id": "A1",
+      "kind": "action",
+      "grade": null,
+      "headline": "Before /dev:run-slice: create the healthchecks.io check (period 5 minutes, grace 10 minutes, Telegram integration) and write its ping URL to kv/eso/prd/prometheus/prd/healthchecks",
+      "body": [
+        "Rulings D1/F1: the dead-man's switch is a healthchecks.io check that Alertmanager pings at most every 5 minutes (P4). In healthchecks.io, create a check with period 5 minutes and grace 10 minutes, and route its notification to Telegram through healthchecks.io's own integration (@HealthchecksBot). A new check stays in 'new' state until its first ping, so creating it before the run notifies nobody. Then write its ping URL from stdin: `bao kv put kv/eso/prd/prometheus/prd/healthchecks ping_url=-` (docs/live-infra-access.md, 'Writing OpenBao secrets via bao kv put'). The test phase pushes PrometheusDeploy and Argo CD syncs it to prd straight away. Alertmanager's pod then mounts the Secret ESO materialises from this leaf."
+      ],
+      "consequence": "Without the leaf, Alertmanager's restarted pod waits on its missing Secret mount once the test phase pushes P4, and no alert reaches Telegram until the leaf exists.",
+      "proposal": "do it — one check in healthchecks.io and one bao kv put; the run's push of PrometheusDeploy depends on it.",
+      "evidence": "read",
+      "author": "plan-writer, planning, r1, plan.md P4 and Ordering constraints",
+      "labels": {
+        "trigger": "normal-use",
+        "impact": "broken",
+        "signal": "silent",
+        "repo": "PrometheusDeploy"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
+    },
+    {
+      "id": "A2",
+      "kind": "action",
+      "grade": null,
+      "headline": "Before /dev:run-slice: generate the filebeat reader's password and write it to kv/eso/prd/elasticsearch/prd/filebeat-reader",
+      "body": [
+        "Settled ruling: the operator generates the read-only Elasticsearch user's password and writes it to OpenBao with one bao kv put. The setup Job takes it through ESO (P6), and the KubeCoder card (KC-124) reads the same leaf later. Write it from stdin, never as a positional argument: `bao kv put kv/eso/prd/elasticsearch/prd/filebeat-reader password=-`. prd's ESO already reads eso/prd/* (ansible/inventories/prd/group_vars/openbao.yml:99), so no policy change is needed."
+      ],
+      "consequence": "Without the leaf, the setup Job's pod waits on its missing Secret after the test phase's push, the reader is never created, and the runbook confirmation (P7, V10) cannot be made.",
+      "proposal": "do it — one bao kv put; the run's ElasticsearchDeploy push and the runbook confirmation depend on it.",
+      "evidence": "read",
+      "author": "plan-writer, planning, r1, plan.md P6 and Ordering constraints",
+      "labels": {
+        "trigger": "normal-use",
+        "impact": "broken",
+        "signal": "loud",
+        "repo": "ElasticsearchDeploy"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
+    }
+  ]
 }
