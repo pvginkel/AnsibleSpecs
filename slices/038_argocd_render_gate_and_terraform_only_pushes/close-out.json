@@ -200,6 +200,53 @@
       "wrap_up": null,
       "strike": null,
       "ruling": null
+    },
+    {
+      "id": "B2",
+      "kind": "defect",
+      "grade": "minor",
+      "headline": "PreSync hook: ~46 Terraform applies launched by one batch of pushes race on the shared TerraformState repo, and two failed (filebeat-prd, pgadmin-prd)",
+      "body": [
+        "Test phase r1, estate rollout: the bump pushes of 47 repos were made in batches of 10-14 within minutes. tf-presync-filebeat-prd and tf-presync-pgadmin-prd failed at terraform init: terraform-backend-git logged 'non-fast-forward update' on its GET of https://github.com/pvginkel/TerraformState (state argocd/<App>/prd/terraform.tfstate), HTTP 500, 'giving up after 3 attempt(s)'. The Application retry (limit 3, 30s backoff) hit the same race on all attempts; both ended Failed/OutOfSync (retryCount 3) at their bump commits (FilebeatDeploy 9976b63, PgadminDeploy 2ea6b46) and Argo does not re-sync a failed revision on its own. 45 other apps synced and applied. With D67 every push runs an apply, so concurrent pushes (a daily image-pin run across repos) now meet this race routinely."
+      ],
+      "consequence": "A burst of deploy-repo pushes can leave an app OutOfSync with a failed hook until someone re-syncs it; the new per-push apply makes bursts more likely.",
+      "proposal": "card: serialize or retry the state-backend access across hook jobs (or have the Argo retry backoff outlast the burst); re-sync the two apps now",
+      "evidence": "witnessed",
+      "author": "test-agent, test phase r1, Job logs of tf-presync-filebeat-prd / tf-presync-pgadmin-prd in argocd-hooks (prd), Application status.operationState",
+      "labels": {
+        "trigger": "ordinary-condition",
+        "impact": "broken",
+        "signal": "loud",
+        "fix": "design",
+        "area": "sensitive",
+        "repo": "Charts"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
+    },
+    {
+      "id": "A3",
+      "kind": "action",
+      "grade": null,
+      "headline": "Re-sync filebeat-prd and pgadmin-prd in Argo CD (prd); they sit OutOfSync with a failed PreSync hook at their bump commits",
+      "body": [
+        "Both apps failed at the state-backend race (see B2). Sync them (argocd UI/CLI, or an operation on the Application); the hook is a no-op apply and the sync adds ConfigMap tf-presync-revision. V06 for these two is settled by that sync."
+      ],
+      "consequence": "The two apps stay OutOfSync with a Failed last operation, and their Terraform apply for the bump commit has not run (no pending Terraform change was found for either, so nothing is unapplied).",
+      "proposal": "do it",
+      "evidence": "witnessed",
+      "author": "test-agent, test phase r1, Application status 2026-10-03 07:35 UTC",
+      "labels": {
+        "trigger": "ordinary-condition",
+        "impact": "degraded",
+        "signal": "loud"
+      },
+      "notes": [],
+      "wrap_up": null,
+      "strike": null,
+      "ruling": null
     }
   ]
 }
