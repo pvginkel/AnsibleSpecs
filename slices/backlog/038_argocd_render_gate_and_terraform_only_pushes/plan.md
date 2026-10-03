@@ -26,14 +26,21 @@
   No manual step, no gate, no new credential. The card pass's option (a) (a hash of terraform/ in
   config/*/values.yaml) is not built: it needs the same chart object plus a manual step and a
   staleness gate, and puts a non-per-stage value into per-stage config (argo-cd D12).
-- Ruling (2026-10-03, D2 — same words): **rolled out estate-wide in this slice.** After
-  FieldnotesDeploy proves the new library version live, every other deploy repo that pins
-  homelab-shared is bumped to it, in batches, as its own phase. Before pushing, that phase lists
-  any app whose terraform/ or config/*/*.tfvars changed since its last sync operation (a commit
-  the defect left unapplied), since the bump push will apply it; those are reported in the
-  phase's done-record. Pushing these deploy repos — and with it one Argo sync and one hook
-  terraform apply per app on prd — is authorized by this ruling; it is the same effect a daily
-  image-pin commit has.
+- Ruling (2026-10-03, D2 — same words; sequencing per D4, review r1 F2 agreed): **rolled out
+  estate-wide in this slice.** Every other deploy repo that pins homelab-shared is bumped to the
+  new version in its own phase; when and how those bumps are pushed is D4's. The phase lists any
+  app whose terraform/ or config/*/*.tfvars changed since its last sync operation (a commit the
+  defect left unapplied), since the bump push will apply it; those are reported in the phase's
+  done-record. Pushing these deploy repos — and with it one Argo sync and one hook terraform
+  apply per app on prd — is authorized by this ruling; it is the same effect a daily image-pin
+  commit has.
+- Ruling (2026-10-03, review r1 F1 — operator: "Agree"): **a consumer's bump is its library
+  version, wherever the repo states it** — the `chart/Chart.yaml` pin, its re-resolved
+  `Chart.lock`, and any test of the repo's own that pins the library version (KubeCoderDeploy's
+  `tests/render-chart.py` `LIBRARY`, checked by `check_library`; the reviewer found no other
+  repo that hard-codes it). The rollout phase runs each bumped repo's own `kc project test`
+  where the repo has one, and records the result in its ledger; "nothing but its pin" wording in
+  the phases and verification.json becomes "nothing but its library version".
 - Ruling (2026-10-03, settled and shown to the operator): **the live proof.** The test phase
   pushes FieldnotesDeploy's library bump, then a commit that only edits a comment in terraform/;
   Argo must sync fieldnotes-prd at that commit (`status.operationState` / `status.history` at the
