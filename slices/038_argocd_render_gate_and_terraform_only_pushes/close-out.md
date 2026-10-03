@@ -4,8 +4,8 @@
      lines are yours to write; everything else is overwritten by the next render.
      `close_out.py show <id>` prints an entry in full. -->
 
-Run: 2026-10-03 08:54 → 09:37 · 5 phases · 0 bail-outs · 1 test round · doc phase at stage
-writer · run docs
+Run: 2026-10-03 08:54 → 09:40 · 5 phases · 0 bail-outs · 1 test round · doc phase at stage
+gate · wrap-up landed · run docs
 
 ## Comes to you
 
@@ -38,18 +38,6 @@ through.
 **Route:** to you — an action
 **Disposition:**
 
-## For the wrap-up
-
-### P1 — AnsibleSpecs argo-cd/decisions.md D17 still tells the charts deploy repo to vendor the library, which slice 039 reverted · minor
-
-**Proposal:** fix now — one '> **Amended 2026-10-03 (slice 039)**' note under D17 in the
-register's own style, pointing at design.md and the cluster-bootstrap runbook.
-
-**Consequence:** A reader of D17 is told to vendor the library into ChartsDeploy — the shape slice 039 deliberately removed — with nothing in the register pointing at the by-hand bootstrap.
-
-**Route:** the wrap-up — fix
-**Disposition:**
-
 ## Closed
 
 ### B2 — PreSync hook: ~46 Terraform applies launched by one batch of pushes race on the shared TerraformState repo, and two failed (filebeat-prd, pgadmin-prd) · minor
@@ -71,3 +59,5 @@ register's own style, pointing at design.md and the cluster-bootstrap runbook.
 ### ~~A1 — Before /dev:run-slice: push slice 039's three unpushed commits — Charts cfae346, ChartsDeploy 69ecb9f, RegistryDeploy e53c36b~~ — already pushed: Charts cfae346, ChartsDeploy 69ecb9f and RegistryDeploy e53c36b are all on origin/main (verified 2026-10-03); struck by run-slice session
 
 ### ~~E2 — P5 cloned 26 deploy repos into /work/scratch for the rollout (and committed a bump into 21 existing scratch clones)~~ — miscounted (24 cloned, 23 existing); replaced by the next entry; struck by code-writer P5
+
+### ~~P1 — AnsibleSpecs argo-cd/decisions.md D17 still tells the charts deploy repo to vendor the library, which slice 039 reverted · minor~~ — resolved: AnsibleSpecs 23644ac adds an 'Amended 2026-10-03 (slice 039)' note under D17 in argo-cd/decisions.md, pointing at design.md 'Charts and charts.home' and Ansible docs/runbooks/cluster-bootstrap.md; spec repo has no kc gate (no .kubecoder/project.yaml); struck by wrap-up
